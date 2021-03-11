@@ -418,6 +418,7 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cortex-m 0.6.7",
+ "cortex-m-rt",
  "cty",
  "lm3s6965",
  "panic-halt",
