@@ -29,7 +29,7 @@ pub struct Interface {
 
 impl Interface {
     pub fn new(intf: INTF) -> Self {
-        let uart = intf as uintptr_t as *mut UART_Type;
+        let uart = intf as *mut UART_Type;
         unsafe {
             (*uart).CTL &= 0xfffffffe;
             (*uart).IBRD = ((*uart).IBRD & 0xffff0000) | 0x000a;

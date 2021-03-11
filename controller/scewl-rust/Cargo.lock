@@ -288,6 +288,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "lm3s6965"
+version = "0.1.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8698042a7495160eac9f7298a32cd1ddbb6ad2780f766f5a99b4f0a6b915e0ad"
+dependencies = [
+ "bare-metal",
+ "cortex-m-rt",
+]
+
+[[package]]
 name = "log"
 version = "0.4.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -408,8 +418,8 @@ version = "0.1.0"
 dependencies = [
  "bindgen",
  "cortex-m 0.6.7",
- "cortex-m-rt",
  "cty",
+ "lm3s6965",
  "panic-halt",
 ]
 

@@ -6,6 +6,7 @@
 pub mod controller;
 pub mod interface;
 
+use lm3s6965 as _;
 use panic_halt as _;
 
 use crate::controller::SCEWLSSSOp::{Deregister, Register};
