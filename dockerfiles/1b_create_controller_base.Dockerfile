@@ -12,7 +12,7 @@ FROM ectf/ectf-qemu:latest
 # Add environment customizations here
 # NOTE: do this first so Docker can used cached containers to skip reinstalling everything
 RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y build-essential binutils-arm-none-eabi gcc-arm-none-eabi make
+    apt-get install -y build-essential binutils-arm-none-eabi curl gcc-arm-none-eabi make
 
 RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
 RUN rustup target add thumbv7m-none-eabi
