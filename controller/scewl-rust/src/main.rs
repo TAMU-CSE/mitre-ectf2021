@@ -8,7 +8,10 @@ pub mod controller;
 pub mod interface;
 
 use lm3s6965 as _;
+#[cfg(not(feature = "semihosted"))]
 use panic_halt as _;
+#[cfg(feature = "semihosted")]
+use panic_semihosting as _;
 
 use cortex_m_rt::entry;
 use cortex_m_rt::exception;
@@ -112,16 +115,21 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
             }
         }
 
+        let message = SCEWLMessage {
+            src_id: hdr.src_id,
+            tgt_id: hdr.tgt_id,
+            len,
+        };
+
+        #[cfg(feature = "semihosted")]
+        hprintln!("Read: {:?}", msg);
+
         match res {
             Ok(read) => {
                 if read < len {
                     Err(NoMessage)
                 } else {
-                    Ok(SCEWLMessage {
-                        src_id: hdr.src_id,
-                        tgt_id: hdr.tgt_id,
-                        len,
-                    })
+                    Ok(message)
                 }
             }
             Err(_) => Err(NoMessage),
@@ -141,6 +149,9 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         intf.write(&hdr.to_bytes(), 8); // magic number; size of the header
 
         intf.write(self.data, message.len);
+
+        #[cfg(feature = "semihosted")]
+        hprintln!("Sent: {:?}", message);
 
         Ok(())
     }

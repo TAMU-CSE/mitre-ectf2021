@@ -142,9 +142,11 @@ dependencies = [
  "bindgen",
  "cortex-m 0.6.7",
  "cortex-m-rt",
+ "cortex-m-semihosting",
  "cty",
  "lm3s6965",
  "panic-halt",
+ "panic-semihosting",
  "volatile-register",
 ]
 
@@ -192,6 +194,15 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn",
+]
+
+[[package]]
+name = "cortex-m-semihosting"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6bffa6c1454368a6aa4811ae60964c38e6996d397ff8095a8b9211b1c1f749bc"
+dependencies = [
+ "cortex-m 0.7.2",
 ]
 
 [[package]]
@@ -361,6 +372,16 @@ name = "panic-halt"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "de96540e0ebde571dc55c73d60ef407c653844e6f9a1e2fdbd40c07b9252d812"
+
+[[package]]
+name = "panic-semihosting"
+version = "0.5.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c3d55dedd501dfd02514646e0af4d7016ce36bc12ae177ef52056989966a1eec"
+dependencies = [
+ "cortex-m 0.7.2",
+ "cortex-m-semihosting",
+]
 
 [[package]]
 name = "peeking_take_while"

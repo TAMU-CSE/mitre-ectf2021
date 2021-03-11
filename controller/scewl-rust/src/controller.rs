@@ -6,6 +6,7 @@ pub const SCEWL_MAX_DATA_SZ: usize = 0x4000;
 pub type scewl_id = u16;
 
 #[repr(C)]
+#[derive(Debug)]
 pub struct SCEWLHeader {
     pub magic_s: u8,
     pub magic_c: u8,
@@ -73,6 +74,7 @@ pub enum SCEWLKnownId {
     FAA,
 }
 
+#[derive(Debug)]
 pub struct SCEWLMessage {
     pub src_id: scewl_id,
     pub tgt_id: scewl_id,
