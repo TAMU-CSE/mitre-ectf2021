@@ -84,3 +84,5 @@ main
 *.sock
 *.deleteme
 .ssh
+
+.idea/
