@@ -34,6 +34,10 @@ ADD . /sed
 
 # generate any other secrets and build controller
 WORKDIR /sed
+
+# redundancy to build a little faster
+RUN source $HOME/.cargo/env && cd scewl-rust && cargo build --release || exit 0
+
 ARG SCEWL_ID
 RUN source $HOME/.cargo/env && make SCEWL_ID=${SCEWL_ID}
 RUN mv /sed/gcc/controller.bin /controller
