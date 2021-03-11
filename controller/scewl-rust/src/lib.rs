@@ -351,10 +351,6 @@ pub extern "C" fn main() -> ! {
     }
 }
 
-// disable these interrupts
-#[interrupt]
-fn UART0() {}
-#[interrupt]
-fn UART1() {}
-#[interrupt]
-fn UART2() {}
+// disable exception handling because we're lazy
+#[exception]
+fn DefaultHandler(irqn: i16) {}
