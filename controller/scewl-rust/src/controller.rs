@@ -40,7 +40,7 @@ impl SCEWLSSSMessage {
         bytes
     }
 
-    pub fn from_bytes(data: [u8; SCEWL_MAX_DATA_SZ]) -> SCEWLSSSMessage {
+    pub fn from_bytes(data: &[u8; SCEWL_MAX_DATA_SZ]) -> SCEWLSSSMessage {
         let mut dev_id = [0u8; 2];
         dev_id.copy_from_slice(&data[0..2]);
         let mut op = [0u8; 2];
@@ -73,11 +73,9 @@ pub enum SCEWLKnownId {
     FAA,
 }
 
-#[derive(Copy, Clone)]
 pub struct SCEWLMessage {
     pub src_id: scewl_id,
     pub tgt_id: scewl_id,
-    pub data: [u8; SCEWL_MAX_DATA_SZ],
     pub len: usize,
 }
 
@@ -85,33 +83,18 @@ pub trait SCEWLClient {
     fn get_intf(&self, intf: INTF) -> Interface;
 
     fn read_msg(&mut self, intf: INTF, len: u16, blocking: bool) -> SCEWLResult<SCEWLMessage>;
-    fn send_msg(&self, intf: INTF, message: SCEWLMessage) -> SCEWLResult<()>;
+    fn send_msg(&self, intf: INTF, message: &SCEWLMessage) -> SCEWLResult<()>;
 
-    fn handle_scewl_recv(
-        &self,
-        src_id: scewl_id,
-        data: [u8; SCEWL_MAX_DATA_SZ],
-        len: usize,
-    ) -> SCEWLResult<()>;
-    fn handle_scewl_send(
-        &self,
-        tgt_id: scewl_id,
-        data: [u8; SCEWL_MAX_DATA_SZ],
-        len: usize,
-    ) -> SCEWLResult<()>;
+    fn handle_scewl_recv(&self, src_id: scewl_id, len: usize) -> SCEWLResult<()>;
+    fn handle_scewl_send(&self, tgt_id: scewl_id, len: usize) -> SCEWLResult<()>;
 
-    fn handle_brdcst_recv(
-        &self,
-        src_id: scewl_id,
-        data: [u8; SCEWL_MAX_DATA_SZ],
-        len: usize,
-    ) -> SCEWLResult<()>;
-    fn handle_brdcst_send(&self, data: [u8; SCEWL_MAX_DATA_SZ], len: usize) -> SCEWLResult<()>;
+    fn handle_brdcst_recv(&self, src_id: scewl_id, len: usize) -> SCEWLResult<()>;
+    fn handle_brdcst_send(&self, len: usize) -> SCEWLResult<()>;
 
-    fn handle_faa_recv(&self, data: [u8; SCEWL_MAX_DATA_SZ], len: usize) -> SCEWLResult<()>;
-    fn handle_faa_send(&self, data: [u8; SCEWL_MAX_DATA_SZ], len: usize) -> SCEWLResult<()>;
+    fn handle_faa_recv(&self, len: usize) -> SCEWLResult<()>;
+    fn handle_faa_send(&self, len: usize) -> SCEWLResult<()>;
 
-    fn handle_registration(&mut self, data: [u8; SCEWL_MAX_DATA_SZ]) -> SCEWLResult<()>;
+    fn handle_registration(&mut self) -> SCEWLResult<()>;
 
     fn sss_register(&mut self) -> bool;
     fn sss_deregister(&mut self) -> bool;

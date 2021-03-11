@@ -23,29 +23,29 @@ use interface::{Interface, INTF};
 
 const SCEWL_ID: &'static str = env!("SCEWL_ID");
 
-struct DefaultClient {
+struct DefaultClient<'a> {
     id: scewl_id,
     cpu: Interface,
     sss: Interface,
     rad: Interface,
-    buf: [u8; SCEWL_MAX_DATA_SZ],
+    data: &'a mut [u8; SCEWL_MAX_DATA_SZ],
     registered: bool,
 }
 
-impl DefaultClient {
-    fn new() -> Self {
+impl<'a> DefaultClient<'a> {
+    fn new(buf: &'a mut [u8; SCEWL_MAX_DATA_SZ]) -> Self {
         DefaultClient {
             id: scewl_id::from_str(SCEWL_ID).unwrap(),
             cpu: Interface::new(CPU),
             sss: Interface::new(SSS),
             rad: Interface::new(CPU),
-            buf: [0u8; SCEWL_MAX_DATA_SZ],
+            data: buf,
             registered: false,
         }
     }
 }
 
-impl SCEWLClient for DefaultClient {
+impl<'a> SCEWLClient for DefaultClient<'a> {
     fn get_intf(&self, intf: INTF) -> Interface {
         match intf {
             CPU => &self.cpu,
@@ -65,7 +65,7 @@ impl SCEWLClient for DefaultClient {
             len: 0,
         };
 
-        for b in self.buf[..len as usize].as_mut() {
+        for b in self.data[..len as usize].as_mut() {
             *b = 0
         }
 
@@ -102,7 +102,7 @@ impl SCEWLClient for DefaultClient {
         }
 
         let len = if hdr.len < len { hdr.len } else { len } as usize;
-        let res = intf.read(&mut self.buf, len, blocking);
+        let res = intf.read(self.data, len, blocking);
 
         if len < hdr.len as usize {
             for _ in len..hdr.len as usize {
@@ -120,7 +120,6 @@ impl SCEWLClient for DefaultClient {
                     Ok(SCEWLMessage {
                         src_id: hdr.src_id,
                         tgt_id: hdr.tgt_id,
-                        data: self.buf,
                         len,
                     })
                 }
@@ -129,7 +128,7 @@ impl SCEWLClient for DefaultClient {
         }
     }
 
-    fn send_msg(&self, intf: INTF, message: SCEWLMessage) -> SCEWLResult<()> {
+    fn send_msg(&self, intf: INTF, message: &SCEWLMessage) -> SCEWLResult<()> {
         let mut intf = self.get_intf(intf);
         let hdr = SCEWLHeader {
             magic_s: b'S',
@@ -141,100 +140,79 @@ impl SCEWLClient for DefaultClient {
 
         intf.write(&hdr.to_bytes(), 8); // magic number; size of the header
 
-        intf.write(&message.data, message.len);
+        intf.write(self.data, message.len);
 
         Ok(())
     }
 
-    fn handle_scewl_recv(
-        &self,
-        src_id: scewl_id,
-        data: [u8; SCEWL_MAX_DATA_SZ],
-        len: usize,
-    ) -> SCEWLResult<()> {
+    fn handle_scewl_recv(&self, src_id: scewl_id, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             CPU,
-            SCEWLMessage {
+            &SCEWLMessage {
                 src_id,
                 tgt_id: self.id,
-                data,
                 len,
             },
         )
     }
 
-    fn handle_scewl_send(
-        &self,
-        tgt_id: scewl_id,
-        data: [u8; SCEWL_MAX_DATA_SZ],
-        len: usize,
-    ) -> SCEWLResult<()> {
+    fn handle_scewl_send(&self, tgt_id: scewl_id, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             RAD,
-            SCEWLMessage {
+            &SCEWLMessage {
                 src_id: self.id,
                 tgt_id,
-                data: data,
                 len,
             },
         )
     }
 
-    fn handle_brdcst_recv(
-        &self,
-        src_id: scewl_id,
-        data: [u8; SCEWL_MAX_DATA_SZ],
-        len: usize,
-    ) -> SCEWLResult<()> {
+    fn handle_brdcst_recv(&self, src_id: scewl_id, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             CPU,
-            SCEWLMessage {
+            &SCEWLMessage {
                 src_id,
                 tgt_id: SCEWLKnownId::Broadcast as u16,
-                data: data,
                 len,
             },
         )
     }
 
-    fn handle_brdcst_send(&self, data: [u8; SCEWL_MAX_DATA_SZ], len: usize) -> SCEWLResult<()> {
+    fn handle_brdcst_send(&self, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             RAD,
-            SCEWLMessage {
+            &SCEWLMessage {
                 src_id: self.id,
                 tgt_id: SCEWLKnownId::Broadcast as u16,
-                data: data,
                 len,
             },
         )
     }
 
-    fn handle_faa_recv(&self, data: [u8; SCEWL_MAX_DATA_SZ], len: usize) -> SCEWLResult<()> {
+    fn handle_faa_recv(&self, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             CPU,
-            SCEWLMessage {
+            &SCEWLMessage {
                 src_id: SCEWLKnownId::FAA as u16,
                 tgt_id: self.id,
-                data: data,
                 len,
             },
         )
     }
 
-    fn handle_faa_send(&self, data: [u8; SCEWL_MAX_DATA_SZ], len: usize) -> SCEWLResult<()> {
+    fn handle_faa_send(&self, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             RAD,
-            SCEWLMessage {
+            &SCEWLMessage {
                 src_id: self.id,
                 tgt_id: SCEWLKnownId::FAA as u16,
-                data,
                 len,
             },
         )
     }
 
-    fn handle_registration(&mut self, data: [u8; SCEWL_MAX_DATA_SZ]) -> SCEWLResult<()> {
-        let message = SCEWLSSSMessage::from_bytes(data);
+    fn handle_registration(&mut self) -> SCEWLResult<()> {
+        let message = SCEWLSSSMessage::from_bytes(self.data);
         if message.op == Register as u16 && self.sss_register() {
             self.registered = true;
         } else if message.op == Deregister as u16 && self.sss_deregister() {
@@ -248,15 +226,15 @@ impl SCEWLClient for DefaultClient {
             dev_id: self.id,
             op: Register as u16,
         };
+        for (b1, b2) in self.data.iter_mut().zip(&message.to_bytes()) {
+            *b1 = *b2;
+        }
 
-        let mut data = [0u8; SCEWL_MAX_DATA_SZ];
-        data.copy_from_slice(&message.to_bytes());
         if let Err(_) = self.send_msg(
             SSS,
-            SCEWLMessage {
+            &SCEWLMessage {
                 src_id: self.id,
                 tgt_id: SCEWLKnownId::SSS as u16,
-                data,
                 len: 4,
             },
         ) {
@@ -268,11 +246,11 @@ impl SCEWLClient for DefaultClient {
             Err(_) => return false,
         };
 
-        if let Err(_) = self.send_msg(CPU, res) {
+        if let Err(_) = self.send_msg(CPU, &res) {
             return false;
         }
 
-        SCEWLSSSMessage::from_bytes(res.data).op == Register as u16
+        SCEWLSSSMessage::from_bytes(self.data).op == Register as u16
     }
 
     fn sss_deregister(&mut self) -> bool {
@@ -280,15 +258,15 @@ impl SCEWLClient for DefaultClient {
             dev_id: self.id,
             op: Deregister as u16,
         };
+        for (b1, b2) in self.data.iter_mut().zip(&message.to_bytes()) {
+            *b1 = *b2;
+        }
 
-        let mut data = [0u8; SCEWL_MAX_DATA_SZ];
-        data.copy_from_slice(&message.to_bytes());
         if let Err(_) = self.send_msg(
             SSS,
-            SCEWLMessage {
+            &SCEWLMessage {
                 src_id: self.id,
                 tgt_id: SCEWLKnownId::SSS as u16,
-                data,
                 len: 4,
             },
         ) {
@@ -300,22 +278,23 @@ impl SCEWLClient for DefaultClient {
             Err(_) => return false,
         };
 
-        if let Err(_) = self.send_msg(CPU, res) {
+        if let Err(_) = self.send_msg(CPU, &res) {
             return false;
         }
 
-        SCEWLSSSMessage::from_bytes(res.data).op == Deregister as u16
+        SCEWLSSSMessage::from_bytes(self.data).op == Deregister as u16
     }
 }
 
 #[entry]
 fn main() -> ! {
-    let mut client = DefaultClient::new();
+    let mut data = [0u8; SCEWL_MAX_DATA_SZ];
+    let mut client = DefaultClient::new(&mut data);
 
     loop {
         if let Ok(msg) = client.read_msg(CPU, SCEWL_MAX_DATA_SZ as u16, true) {
             if msg.tgt_id == SCEWLKnownId::SSS as u16 {
-                let _ignored = client.handle_registration(msg.data);
+                let _ignored = client.handle_registration();
             }
         }
 
@@ -323,13 +302,13 @@ fn main() -> ! {
             if client.cpu.avail() {
                 if let Ok(msg) = client.read_msg(INTF::CPU, SCEWL_MAX_DATA_SZ as u16, true) {
                     let _ignored = if msg.tgt_id == SCEWLKnownId::Broadcast as u16 {
-                        client.handle_brdcst_send(msg.data, msg.len)
+                        client.handle_brdcst_send(msg.len)
                     } else if msg.tgt_id == SCEWLKnownId::SSS as u16 {
-                        client.handle_registration(msg.data)
+                        client.handle_registration()
                     } else if msg.tgt_id == SCEWLKnownId::FAA as u16 {
-                        client.handle_faa_send(msg.data, msg.len)
+                        client.handle_faa_send(msg.len)
                     } else {
-                        client.handle_scewl_recv(msg.src_id, msg.data, msg.len)
+                        client.handle_scewl_recv(msg.src_id, msg.len)
                     };
 
                     continue;
@@ -339,12 +318,12 @@ fn main() -> ! {
             if client.rad.avail() {
                 if let Ok(msg) = client.read_msg(INTF::RAD, SCEWL_MAX_DATA_SZ as u16, true) {
                     let _ignored = if msg.tgt_id == SCEWLKnownId::Broadcast as u16 {
-                        client.handle_brdcst_recv(msg.src_id, msg.data, msg.len)
+                        client.handle_brdcst_recv(msg.src_id, msg.len)
                     } else if msg.tgt_id == client.id {
                         if msg.src_id == SCEWLKnownId::FAA as u16 {
-                            client.handle_faa_recv(msg.data, msg.len)
+                            client.handle_faa_recv(msg.len)
                         } else {
-                            client.handle_scewl_recv(msg.src_id, msg.data, msg.len)
+                            client.handle_scewl_recv(msg.src_id, msg.len)
                         }
                     } else {
                         continue;
