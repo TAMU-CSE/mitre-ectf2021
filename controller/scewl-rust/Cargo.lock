@@ -145,6 +145,7 @@ dependencies = [
  "cty",
  "lm3s6965",
  "panic-halt",
+ "volatile-register",
 ]
 
 [[package]]

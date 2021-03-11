@@ -1,6 +1,7 @@
 [target.thumbv7m-none-eabi]
 # uncomment this to make `cargo run` execute programs on QEMU
-runner = "qemu-system-arm -cpu cortex-m3 -machine lm3s6965evb -nographic -monitor none -semihosting-config enable=on,target=native -kernel"
+# assuming you're using 14 as your SCEWL_ID
+runner = "qemu-system-arm -S -cpu cortex-m3 -machine lm3s6965evb -monitor none -nographic -serial unix:socks/scewl_bus_14.sock,server -serial unix:socks/sss.sock -serial unix:socks/antenna_14.sock -semihosting-config enable=on,target=native -kernel"
 
 [target.'cfg(all(target_arch = "arm", target_os = "none"))']
 # uncomment ONE of these three option to make `cargo run` start a GDB session

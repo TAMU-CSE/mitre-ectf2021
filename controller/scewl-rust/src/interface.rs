@@ -2,8 +2,27 @@ use crate::interface::InterfaceError::NoData;
 use crate::interface::RWStatusMask::{RXFE, TXFF};
 use cortex_m::asm;
 use cty::uintptr_t;
+use volatile_register::*;
 
-include!(concat!(env!("OUT_DIR"), "/cmsis.rs"));
+#[repr(C)]
+struct UART {
+    DR: RW<u32>,
+    RSR: RW<u32>,
+    RESERVED1: [u8; 16],
+    FR: RO<u32>,
+    RESERVED2: [u8; 4],
+    ILPR: RW<u32>,
+    IBRD: RW<u32>,
+    FBRD: RW<u32>,
+    LCRH: RW<u32>,
+    CTL: RW<u32>,
+    IFLS: RW<u32>,
+    IM: RW<u32>,
+    RIS: RO<u32>,
+    MIS: RO<u32>,
+    ICR: WO<u32>,
+    DMACTL: RW<u32>,
+}
 
 pub enum RWStatusMask {
     RXFE = 0x10,
@@ -24,24 +43,24 @@ pub enum InterfaceError {
 pub type InterfaceResult<T> = Result<T, InterfaceError>;
 
 pub struct Interface {
-    uart: *mut UART_Type,
+    uart: &'static mut UART,
 }
 
 impl Interface {
     pub fn new(intf: INTF) -> Self {
-        let uart = intf as uintptr_t as *mut UART_Type;
+        let uart = unsafe { &mut *(intf as uintptr_t as *mut UART) };
         unsafe {
-            (*uart).CTL &= 0xfffffffe;
-            (*uart).IBRD = ((*uart).IBRD & 0xffff0000) | 0x000a;
-            (*uart).FBRD = ((*uart).FBRD & 0xffff0000) | 0x0036;
-            (*uart).LCRH = 0x60;
-            (*uart).CTL |= 0x01;
+            uart.CTL.write(uart.CTL.read() & 0xfffffffe);
+            uart.IBRD.write((uart.IBRD.read() & 0xffff0000) | 0x000a);
+            uart.FBRD.write((uart.FBRD.read() & 0xffff0000) | 0x0036);
+            uart.LCRH.write(0x60);
+            uart.CTL.write(uart.CTL.read() | 0x01);
         }
         Interface { uart }
     }
 
     pub fn avail(&self) -> bool {
-        unsafe { ((*self.uart).FR & (RXFE as u32)) == 0 }
+        self.uart.FR.read() & (RXFE as u32) == 0
     }
 
     pub fn readb(&mut self, blocking: bool) -> InterfaceResult<u8> {
@@ -50,7 +69,7 @@ impl Interface {
         if !self.avail() {
             Err(NoData)
         } else {
-            Ok(unsafe { (*self.uart).DR as u8 })
+            Ok(self.uart.DR.read() as u8)
         }
     }
 
@@ -70,8 +89,10 @@ impl Interface {
     }
 
     pub fn writeb(&mut self, data: u8) -> () {
-        while unsafe { (*self.uart).FR } & (TXFF as u32) != 0 {}
-        unsafe { (*self.uart).DR = data.into() }
+        while self.uart.FR.read() & (TXFF as u32) != 0 {}
+        unsafe {
+            self.uart.DR.write(data.into());
+        }
     }
 
     pub fn write(&mut self, buf: &[u8], len: usize) -> usize {
@@ -84,6 +105,7 @@ impl Interface {
 
 impl Clone for Interface {
     fn clone(&self) -> Self {
-        Self { uart: self.uart }
+        let uart = unsafe { &mut *(self.uart as *const UART as *mut UART) };
+        Self { uart }
     }
 }

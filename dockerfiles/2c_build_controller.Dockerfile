@@ -40,7 +40,8 @@ RUN source $HOME/.cargo/env && cd scewl-rust && cargo build --release || exit 0
 
 ARG SCEWL_ID
 RUN source $HOME/.cargo/env && cd scewl-rust && SCEWL_ID=${SCEWL_ID} cargo build --release
-RUN mv /sed/scewl-rust/target/thumbv7m-none-eabi/release/controller /controller
+RUN mv /sed/scewl-rust/target/thumbv7m-none-eabi/release/controller /controller.elf
+RUN arm-none-eabi-objcopy -O binary /controller.elf /controller
 
 # NOTE: If you want to use the debugger with the scripts we provide, 
 #       the ELF file must be at /controller.elf
