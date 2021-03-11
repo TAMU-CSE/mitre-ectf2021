@@ -22,6 +22,7 @@ use crate::controller::SCEWLSSSOp::{Deregister, Register};
 use crate::controller::SCEWLStatus::NoMessage;
 use crate::interface::INTF::*;
 use controller::*;
+use core::cmp::min;
 use core::mem::size_of;
 use core::str::FromStr;
 use interface::{Interface, INTF};
@@ -106,7 +107,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
             **item = u16::from_ne_bytes(buf);
         }
 
-        let len = if hdr.len < len { hdr.len } else { len } as usize;
+        let len = min(hdr.len, len) as usize;
         let res = intf.read(self.data, len, blocking);
 
         if len < hdr.len as usize {
@@ -124,7 +125,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         };
 
         #[cfg(feature = "semihosted")]
-        hprintln!("Read: {:?}", msg);
+        hprintln!("Read: {:?}", message);
 
         match res {
             Ok(read) => {
@@ -321,7 +322,7 @@ fn main() -> ! {
                     } else if msg.tgt_id == SCEWLKnownId::FAA as u16 {
                         client.handle_faa_send(msg.len)
                     } else {
-                        client.handle_scewl_recv(msg.src_id, msg.len)
+                        client.handle_scewl_send(msg.src_id, msg.len)
                     };
 
                     continue;
