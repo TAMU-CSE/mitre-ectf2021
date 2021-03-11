@@ -6,7 +6,7 @@
 pub mod controller;
 pub mod interface;
 
-use lm3s6965 as _;
+use lm3s6965::interrupt;
 use panic_halt as _;
 
 use crate::controller::SCEWLSSSOp::{Deregister, Register};
@@ -350,3 +350,11 @@ pub extern "C" fn main() -> ! {
         }
     }
 }
+
+// disable these interrupts
+#[interrupt]
+fn UART0() {}
+#[interrupt]
+fn UART1() {}
+#[interrupt]
+fn UART2() {}
