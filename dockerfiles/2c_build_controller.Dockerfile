@@ -35,7 +35,7 @@ ADD . /sed
 # generate any other secrets and build controller
 WORKDIR /sed
 ARG SCEWL_ID
-RUN make SCEWL_ID=${SCEWL_ID}
+RUN source $HOME/.cargo/env && make SCEWL_ID=${SCEWL_ID}
 RUN mv /sed/gcc/controller.bin /controller
 
 # NOTE: If you want to use the debugger with the scripts we provide, 

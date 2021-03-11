@@ -84,7 +84,7 @@ arg_check:
 	$(call check_defined, SCEWL_ID)
 
 ${COMPILER}/controller.a: scewl-rust/Cargo.toml scewl-rust/Cargo.lock scewl-rust/build.rs $(shell find scewl-rust/src -name \*.rs)
-	@echo "  CARGO ${@} ${LNK_SCP}"
+	@echo "  CARGO scewl-rust"
 	@cd scewl-rust; cargo build --release
 	@cp scewl-rust/target/thumbv7m-none-eabi/release/libscewl.a ${COMPILER}/controller.a
 
