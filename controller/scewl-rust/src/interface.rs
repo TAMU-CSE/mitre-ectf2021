@@ -81,7 +81,7 @@ impl Interface {
             }
 
             // apparently QEMU needs a little time to spin up
-            for _ in 0..100000 {
+            for _ in 0..1000000 {
                 asm::nop();
             }
         }
