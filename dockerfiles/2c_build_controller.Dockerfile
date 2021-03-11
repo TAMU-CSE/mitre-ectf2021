@@ -39,9 +39,9 @@ WORKDIR /sed
 RUN source $HOME/.cargo/env && cd scewl-rust && cargo build --release || exit 0
 
 ARG SCEWL_ID
-RUN source $HOME/.cargo/env && make SCEWL_ID=${SCEWL_ID}
-RUN mv /sed/gcc/controller.bin /controller
+RUN source $HOME/.cargo/env && cd scewl-rust && SCEWL_ID=${SCEWL_ID} cargo build --release
+RUN mv /sed/scewl-rust/target/thumbv7m-none-eabi/release/controller /controller
 
 # NOTE: If you want to use the debugger with the scripts we provide, 
 #       the ELF file must be at /controller.elf
-RUN mv /sed/gcc/controller.axf /controller.elf
+#RUN mv /sed/gcc/controller.axf /controller.elf
