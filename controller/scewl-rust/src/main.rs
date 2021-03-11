@@ -7,6 +7,8 @@
 pub mod controller;
 pub mod interface;
 
+#[cfg(feature = "semihosted")]
+use cortex_m_semihosting::hprintln;
 use lm3s6965 as _;
 #[cfg(not(feature = "semihosted"))]
 use panic_halt as _;
