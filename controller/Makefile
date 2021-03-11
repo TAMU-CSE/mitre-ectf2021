@@ -32,8 +32,8 @@ all: ${COMPILER}
 
 # for each source file that needs to be compiled besides
 # the file that defines `main`, add the next two lines 
-#LDFLAGS+=${COMPILER}/interface.o
-#all: ${COMPILER}/interface.o
+LDFLAGS+=${COMPILER}/interface.o
+all: ${COMPILER}/interface.o
 
 ################ start crypto example ################
 # example AES rules to build in tiny-AES-c: https://github.com/kokke/tiny-AES-c
@@ -53,7 +53,7 @@ IPATH+=${CRYPTOPATH}
 # add crypto object file to includes path
 LDFLAGS+=${COMPILER}/aes.o
 
-# add compiler flag to enable example AES code 
+# add compiler flag to enable example AES code
 CFLAGS+=-DEXAMPLE_AES
 
 # add rule to build crypto library
@@ -67,7 +67,7 @@ all: ${COMPILER}/controller.axf
 # clean all build products
 clean:
 	@rm -rf ${COMPILER} ${wildcard *~}
-	@cd scewl-rust && cargo clean
+#	@cd scewl-rust && cargo clean
 
 # create the output directory
 ${COMPILER}:
@@ -83,15 +83,15 @@ __check_defined = \
 arg_check:
 	$(call check_defined, SCEWL_ID)
 
-${COMPILER}/controller.a: scewl-rust/Cargo.toml scewl-rust/Cargo.lock scewl-rust/build.rs $(shell find scewl-rust/src -name \*.rs)
-	@echo "  CARGO scewl-rust"
-	@cd scewl-rust; cargo build --release
-	@cp scewl-rust/target/thumbv7m-none-eabi/release/libscewl.a ${COMPILER}/controller.a
+#${COMPILER}/controller.a: scewl-rust/Cargo.toml scewl-rust/Cargo.lock scewl-rust/build.rs $(shell find scewl-rust/src -name \*.rs)
+#	@echo "  CARGO scewl-rust"
+#	@cd scewl-rust; cargo build --release
+#	@cp scewl-rust/target/thumbv7m-none-eabi/release/libscewl.a ${COMPILER}/controller.a
 
 ${COMPILER}/controller.axf: arg_check
-#${COMPILER}/controller.axf: ${COMPILER}/controller.o
+${COMPILER}/controller.axf: ${COMPILER}/controller.o
 ${COMPILER}/controller.axf: ${COMPILER}/startup_${COMPILER}.o
-${COMPILER}/controller.axf: ${COMPILER}/controller.a
+#${COMPILER}/controller.axf: ${COMPILER}/controller.a
 ${COMPILER}/controller.axf: ${COMPILER}/system_lm3s.o
 ifeq (${COMPILER}, gcc)
 ${COMPILER}/controller.axf: lm3s/controller.ld

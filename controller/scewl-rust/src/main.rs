@@ -1,4 +1,5 @@
 #![no_std]
+#![no_main]
 #![allow(non_upper_case_globals)]
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
@@ -6,8 +7,11 @@
 pub mod controller;
 pub mod interface;
 
-use lm3s6965::interrupt;
+use lm3s6965 as _;
 use panic_halt as _;
+
+use cortex_m_rt::entry;
+use cortex_m_rt::exception;
 
 use crate::controller::SCEWLSSSOp::{Deregister, Register};
 use crate::controller::SCEWLStatus::NoMessage;
@@ -304,8 +308,8 @@ impl SCEWLClient for DefaultClient {
     }
 }
 
-#[no_mangle]
-pub extern "C" fn main() -> ! {
+#[entry]
+fn main() -> ! {
     let mut client = DefaultClient::new();
 
     loop {
@@ -353,4 +357,4 @@ pub extern "C" fn main() -> ! {
 
 // disable exception handling because we're lazy
 #[exception]
-fn DefaultHandler(irqn: i16) {}
+fn DefaultHandler(_irqn: i16) {}

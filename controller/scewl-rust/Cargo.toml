@@ -2,7 +2,7 @@
 authors = ["Addison Crump <me@addisoncrump.info>"]
 edition = "2018"
 readme = "README.md"
-name = "scewl"
+name = "controller"
 version = "0.1.0"
 
 [dependencies]
@@ -16,11 +16,10 @@ panic-halt = "0.2.0"
 bindgen = "0.57"
 
 # this lets you use `cargo fix`!
-[lib]
-name = "scewl"
+[[bin]]
+name = "controller"
 test = false
 bench = false
-crate-type = ["staticlib"]
 
 [profile.release]
 codegen-units = 1 # better optimizations

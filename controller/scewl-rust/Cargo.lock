@@ -136,6 +136,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "controller"
+version = "0.1.0"
+dependencies = [
+ "bindgen",
+ "cortex-m 0.6.7",
+ "cortex-m-rt",
+ "cty",
+ "lm3s6965",
+ "panic-halt",
+]
+
+[[package]]
 name = "cortex-m"
 version = "0.6.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -410,18 +422,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "138e3e0acb6c9fb258b19b67cb8abd63c00679d2851805ea151465464fe9030a"
 dependencies = [
  "semver",
-]
-
-[[package]]
-name = "scewl"
-version = "0.1.0"
-dependencies = [
- "bindgen",
- "cortex-m 0.6.7",
- "cortex-m-rt",
- "cty",
- "lm3s6965",
- "panic-halt",
 ]
 
 [[package]]
