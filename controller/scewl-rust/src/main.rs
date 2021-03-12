@@ -21,7 +21,6 @@ use crate::controller::SCEWLSSSOp::{Deregister, Register};
 use crate::controller::SCEWLStatus;
 use crate::controller::SCEWLStatus::NoMessage;
 use crate::crypto::{AESCryptoHandler, AuthHandler, NopAuthHandler};
-use crate::interface::Error::Unknown;
 use crate::interface::INTF::{CPU, RAD, SSS};
 use controller::{
     SCEWLClient, SCEWLHeader, SCEWLKnownId, SCEWLMessage, SCEWLResult, SCEWLSSSMessage, ScewlId,
