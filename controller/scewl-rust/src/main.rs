@@ -23,7 +23,7 @@ use crate::controller::SCEWLStatus::NoMessage;
 use crate::interface::INTF::*;
 use controller::*;
 use core::cmp::min;
-use core::mem::{size_of, size_of_val};
+use core::mem::size_of;
 use core::str::FromStr;
 use interface::{Interface, INTF};
 
