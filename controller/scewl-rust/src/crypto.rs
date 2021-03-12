@@ -1,14 +1,14 @@
 use crate::controller::SCEWL_MAX_DATA_SZ;
 use aes::Aes128;
 use block_modes::block_padding::Pkcs7;
-use block_modes::{BlockMode, BlockModeError, Cbc};
+use block_modes::{BlockMode, Cbc};
 use core::mem::size_of;
 use rand::{RngCore, SeedableRng};
 use rand_hc::Hc128Rng;
 
 pub trait AuthHandler {
     fn encrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], len: usize) -> usize;
-    fn decrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], len: usize) -> usize;
+    fn decrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], len: usize) -> Option<usize>;
 }
 
 pub struct NopAuthHandler;
@@ -18,8 +18,8 @@ impl AuthHandler for NopAuthHandler {
         len
     }
 
-    fn decrypt(&mut self, _: &mut [u8; SCEWL_MAX_DATA_SZ], len: usize) -> usize {
-        len
+    fn decrypt(&mut self, _: &mut [u8; SCEWL_MAX_DATA_SZ], len: usize) -> Option<usize> {
+        Some(len)
     }
 }
 
@@ -98,7 +98,7 @@ impl AuthHandler for AESCryptoHandler {
         {
             data[to] = data[from];
         }
-        len
+        Some(len)
     }
 }
 
