@@ -1,7 +1,7 @@
 use crate::interface::Error::NoData;
 use crate::interface::RWStatusMask::{RXFE, TXFF};
 use core::fmt::Formatter;
-use core::fmt::{Debug, Error as FmtError, Result as FmtResult};
+use core::fmt::{Debug, Result as FmtResult};
 use core::result::Result as CoreResult;
 use cortex_m::asm;
 use cty::uintptr_t;

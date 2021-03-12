@@ -3,8 +3,6 @@ use aes::Aes128;
 use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
 use core::mem::size_of;
-use core::ops::{Add, Rem, Sub};
-use num::Integer;
 use rand::{RngCore, SeedableRng};
 use rand_hc::Hc128Rng;
 
@@ -103,5 +101,9 @@ impl AuthHandler for AESCryptoHandler {
 }
 
 fn block_roundup(len: usize) -> usize {
-    len - (len % 16) + 16
+    if len % 16 == 0 {
+        len
+    } else {
+        len - (len % 16) + 16
+    }
 }
