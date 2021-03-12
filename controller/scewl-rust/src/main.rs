@@ -44,7 +44,7 @@ impl<'a> DefaultClient<'a> {
             id: scewl_id::from_str(SCEWL_ID).unwrap(),
             cpu: Interface::new(CPU),
             sss: Interface::new(SSS),
-            rad: Interface::new(CPU),
+            rad: Interface::new(RAD),
             data: buf,
             registered: false,
         }
