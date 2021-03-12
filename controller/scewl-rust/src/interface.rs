@@ -29,6 +29,7 @@ pub enum RWStatusMask {
     TXFF = 0x20,
 }
 
+#[derive(Debug)]
 pub enum INTF {
     CPU = 0x4000C000,
     SSS = 0x4000D000,

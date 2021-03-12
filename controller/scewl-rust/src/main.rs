@@ -125,7 +125,13 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         };
 
         #[cfg(feature = "semihosted")]
-        hprintln!("Read: {:?}: {:?}", message, &self.data[..message.len]).ok();
+        hprintln!(
+            "Read: {:?} {:?}: {:?}",
+            intf,
+            message,
+            &self.data[..message.len]
+        )
+        .ok();
 
         match res {
             Ok(read) => {
@@ -154,7 +160,13 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         intf.write(self.data, message.len);
 
         #[cfg(feature = "semihosted")]
-        hprintln!("Read: {:?}: {:?}", message, &self.data[..message.len]).ok();
+        hprintln!(
+            "Send: {:?} {:?}: {:?}",
+            intf,
+            message,
+            &self.data[..message.len]
+        )
+        .ok();
 
         Ok(())
     }
