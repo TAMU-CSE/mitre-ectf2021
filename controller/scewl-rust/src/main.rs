@@ -133,10 +133,10 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
         let len = min(hdr.len, len) as usize;
         let res = intf.read(self.data, len, blocking);
 
-        let actual = if hdr.src_id == SCEWLKnownId::FAA as u16 {
-            len
-        } else {
+        let actual = if intf.named() == INTF::RAD && hdr.src_id != SCEWLKnownId::FAA as u16 {
             self.crypto.decrypt(&mut self.data, len)
+        } else {
+            len
         };
 
         if len < hdr.len as usize {
@@ -186,10 +186,10 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
 
         intf.write(&hdr.to_bytes(), 8); // magic number; size of the header
 
-        let actual = if hdr.tgt_id == SCEWLKnownId::FAA as u16 {
-            message.len
-        } else {
+        let actual = if intf.named() == INTF::RAD && hdr.src_id != SCEWLKnownId::FAA as u16 {
             self.crypto.encrypt(&mut self.data, message.len)
+        } else {
+            message.len
         };
 
         intf.write(self.data, actual);

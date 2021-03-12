@@ -106,6 +106,15 @@ impl Interface {
         }
         len
     }
+
+    pub fn named(&self) -> INTF {
+        match self.uart as *const UART as uintptr_t {
+            0x4000_C000 => INTF::CPU,
+            0x4000_D000 => INTF::SSS,
+            0x4000_E000 => INTF::RAD,
+            _ => {}
+        }
+    }
 }
 
 impl Clone for Interface {
@@ -117,12 +126,6 @@ impl Clone for Interface {
 
 impl Debug for Interface {
     fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
-        let intf = match self.uart as *const UART as uintptr_t {
-            0x4000_C000 => INTF::CPU,
-            0x4000_D000 => INTF::SSS,
-            0x4000_E000 => INTF::RAD,
-            _ => return Err(FmtError),
-        };
-        write!(f, "{:?}", intf)
+        write!(f, "{:?}", self.named())
     }
 }
