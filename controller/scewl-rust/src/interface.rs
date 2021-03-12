@@ -3,7 +3,6 @@ use crate::interface::RWStatusMask::{RXFE, TXFF};
 use core::fmt::Formatter;
 use core::fmt::{Debug, Result as FmtResult};
 use core::result::Result as CoreResult;
-use cortex_m::asm;
 use cty::uintptr_t;
 use volatile_register::{RO, RW, WO};
 
@@ -83,11 +82,6 @@ impl Interface {
             match self.readb(blocking) {
                 Ok(b) => buf[i] = b,
                 Err(_) => return Result::Ok(i),
-            }
-
-            // apparently QEMU needs a little time to spin up
-            for _ in 0..100_000 {
-                asm::nop();
             }
         }
         Ok(n)
