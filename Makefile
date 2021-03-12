@@ -69,7 +69,8 @@ remove_sed:
 		-f dockerfiles/3_remove_sed.Dockerfile \
 		-t ${DEPLOYMENT}/sss \
 		--build-arg DEPLOYMENT=${DEPLOYMENT} \
-		--build-arg SCEWL_ID=${SCEWL_ID}
+		--build-arg SCEWL_ID=${SCEWL_ID} \
+        --build-arg SEMIHOSTED=${SEMIHOSTED}
 
 ############################################################
 # Step 4: Launch the radio and SSS
