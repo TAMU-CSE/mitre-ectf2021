@@ -35,6 +35,7 @@ ADD . /sed
 # generate any other secrets and build controller
 WORKDIR /sed
 
+ARG SEMIHOSTED
 # redundancy to build a little faster
 RUN source $HOME/.cargo/env && cd scewl-rust && cargo build --release --features "$SEMIHOSTED" || exit 0
 
