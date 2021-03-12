@@ -1,5 +1,7 @@
 use crate::interface::InterfaceError::NoData;
 use crate::interface::RWStatusMask::{RXFE, TXFF};
+use core::fmt::Formatter;
+use core::fmt::{Debug, Error as FmtError, Result as FmtResult};
 use cortex_m::asm;
 use cty::uintptr_t;
 use volatile_register::*;
@@ -108,5 +110,17 @@ impl Clone for Interface {
     fn clone(&self) -> Self {
         let uart = unsafe { &mut *(self.uart as *const UART as *mut UART) };
         Self { uart }
+    }
+}
+
+impl Debug for Interface {
+    fn fmt(&self, f: &mut Formatter<'_>) -> FmtResult {
+        let intf = match self.uart as *const UART as uintptr_t {
+            0x4000C000 => INTF::CPU,
+            0x4000D000 => INTF::SSS,
+            0x4000E000 => INTF::RAD,
+            _ => return Err(FmtError),
+        };
+        write!(f, "{:?}", intf)
     }
 }
