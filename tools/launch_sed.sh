@@ -14,11 +14,14 @@
 
 set -e
 
+# optionally enable semihosting
+if [[ -z "$SEMIHOSTED" ]]; then SEMIHOSTING_ARG="-semihosting-config enable=on,target=native"; fi
+
 # launch controller
 CONTROLLER=`docker run -d \
     -v ${SOCK_ROOT}:/socks ${CONT_DOCK_OPT} \
     ${DEPLOYMENT}/${SC}controller:${NAME}_${SCEWL_ID} \
-    qemu-system-arm -M lm3s6965evb -nographic -monitor none \
+    qemu-system-arm -M lm3s6965evb -nographic -monitor none $SEMIHOSTING_ARG \
         ${GDB} \
         -kernel /controller \
         -serial unix:/socks/scewl_bus_${SCEWL_ID}.sock,server \
