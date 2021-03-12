@@ -1,8 +1,6 @@
 #![no_std]
 #![no_main]
-#![allow(non_upper_case_globals)]
-#![allow(non_camel_case_types)]
-#![allow(non_snake_case)]
+#![warn(clippy::pedantic)]
 
 mod controller;
 mod crypto;
@@ -21,7 +19,7 @@ use cortex_m_rt::exception;
 
 use crate::controller::SCEWLSSSOp::{Deregister, Register};
 use crate::controller::SCEWLStatus::NoMessage;
-use crate::crypto::{CryptoHandler, NopCryptoHandler};
+use crate::crypto::{AESCryptoHandler, AuthHandler, NopAuthHandler};
 use crate::interface::INTF::*;
 use controller::*;
 use core::cmp::min;
@@ -29,13 +27,13 @@ use core::mem::size_of;
 use core::str::FromStr;
 use interface::{Interface, INTF};
 
-const SCEWL_ID: &'static str = env!("SCEWL_ID");
+const SCEWL_ID: &str = env!("SCEWL_ID");
 
 struct DefaultClient<'a, T>
 where
-    T: CryptoHandler + Sized,
+    T: AuthHandler + Sized,
 {
-    id: scewl_id,
+    id: ScewlId,
     cpu: Interface,
     sss: Interface,
     rad: Interface,
@@ -44,21 +42,36 @@ where
     registered: bool,
 }
 
-impl<'a> DefaultClient<'a, NopCryptoHandler> {
+impl<'a> DefaultClient<'a, NopAuthHandler> {
+    #[allow(dead_code)]
     fn new(buf: &'a mut [u8; SCEWL_MAX_DATA_SZ]) -> Self {
         DefaultClient {
-            id: scewl_id::from_str(SCEWL_ID).unwrap(),
+            id: ScewlId::from_str(SCEWL_ID).unwrap(),
             cpu: Interface::new(CPU),
             sss: Interface::new(SSS),
             rad: Interface::new(RAD),
             data: buf,
-            crypto: NopCryptoHandler {},
+            crypto: NopAuthHandler {},
             registered: false,
         }
     }
 }
 
-impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
+impl<'a, T: AuthHandler + Sized> DefaultClient<'a, T> {
+    fn new_with_crypto(buf: &'a mut [u8; SCEWL_MAX_DATA_SZ], crypto: T) -> Self {
+        DefaultClient {
+            id: ScewlId::from_str(SCEWL_ID).unwrap(),
+            cpu: Interface::new(CPU),
+            sss: Interface::new(SSS),
+            rad: Interface::new(RAD),
+            data: buf,
+            crypto,
+            registered: false,
+        }
+    }
+}
+
+impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
     fn get_intf(&self, intf: INTF) -> Interface {
         match intf {
             CPU => &self.cpu,
@@ -107,7 +120,7 @@ impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
         }
 
         for item in &mut [&mut hdr.tgt_id, &mut hdr.src_id, &mut hdr.len] {
-            let mut buf = [0u8; size_of::<u16>()];
+            let mut buf = [0_u8; size_of::<u16>()];
             if let Err(_) = intf.read(&mut buf, size_of::<u16>(), blocking) {
                 return Err(NoMessage);
             }
@@ -117,9 +130,11 @@ impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
         let len = min(hdr.len, len) as usize;
         let res = intf.read(self.data, len, blocking);
 
-        if hdr.src_id != SCEWLKnownId::FAA as u16 {
-            self.crypto.decrypt(&mut self.data, len);
-        }
+        let actual = if hdr.src_id == SCEWLKnownId::FAA as u16 {
+            len
+        } else {
+            self.crypto.decrypt(&mut self.data, len)
+        };
 
         if len < hdr.len as usize {
             for _ in len..hdr.len as usize {
@@ -132,7 +147,7 @@ impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
         let message = SCEWLMessage {
             src_id: hdr.src_id,
             tgt_id: hdr.tgt_id,
-            len,
+            len: actual,
         };
 
         #[cfg(feature = "semihosted")]
@@ -168,25 +183,21 @@ impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
 
         intf.write(&hdr.to_bytes(), 8); // magic number; size of the header
 
-        if hdr.tgt_id != SCEWLKnownId::FAA as u16 {
-            self.crypto.encrypt(&mut self.data, message.len);
-        }
+        let actual = if hdr.tgt_id == SCEWLKnownId::FAA as u16 {
+            message.len
+        } else {
+            self.crypto.encrypt(&mut self.data, message.len)
+        };
 
-        intf.write(self.data, message.len);
+        intf.write(self.data, actual);
 
         #[cfg(feature = "semihosted")]
-        hprintln!(
-            "Send: {:?} {:?}: {:?}",
-            intf,
-            message,
-            &self.data[..message.len]
-        )
-        .ok();
+        hprintln!("Send: {:?} {:?}: {:?}", intf, message, &self.data[..actual]).ok();
 
         Ok(())
     }
 
-    fn handle_scewl_recv(&mut self, src_id: scewl_id, len: usize) -> SCEWLResult<()> {
+    fn handle_scewl_recv(&mut self, src_id: ScewlId, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             CPU,
             &SCEWLMessage {
@@ -197,7 +208,7 @@ impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
         )
     }
 
-    fn handle_scewl_send(&mut self, tgt_id: scewl_id, len: usize) -> SCEWLResult<()> {
+    fn handle_scewl_send(&mut self, tgt_id: ScewlId, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             RAD,
             &SCEWLMessage {
@@ -208,7 +219,7 @@ impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
         )
     }
 
-    fn handle_brdcst_recv(&mut self, src_id: scewl_id, len: usize) -> SCEWLResult<()> {
+    fn handle_brdcst_recv(&mut self, src_id: ScewlId, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             CPU,
             &SCEWLMessage {
@@ -329,8 +340,11 @@ impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
 
 #[entry]
 fn main() -> ! {
-    let mut data = [0u8; SCEWL_MAX_DATA_SZ];
-    let mut client = DefaultClient::new(&mut data);
+    let mut data = [0_u8; SCEWL_MAX_DATA_SZ];
+    // let mut client = DefaultClient::new(&mut data);
+
+    let crypto = AESCryptoHandler::new([0; 16], [0; 32]);
+    let mut client = DefaultClient::new_with_crypto(&mut data, crypto);
 
     loop {
         if let Ok(msg) = client.read_msg(CPU, SCEWL_MAX_DATA_SZ as u16, true) {
@@ -377,4 +391,5 @@ fn main() -> ! {
 
 // disable exception handling because we're lazy
 #[exception]
+#[allow(non_snake_case)]
 fn DefaultHandler(_irqn: i16) {}
