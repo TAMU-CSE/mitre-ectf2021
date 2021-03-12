@@ -32,7 +32,7 @@ pub enum RWStatusMask {
     TXFF = 0x20,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
 pub enum INTF {
     CPU = 0x4000_C000,
     SSS = 0x4000_D000,
@@ -112,12 +112,13 @@ impl Interface {
             0x4000_C000 => INTF::CPU,
             0x4000_D000 => INTF::SSS,
             0x4000_E000 => INTF::RAD,
-            _ => {}
+            _ => panic!("Impossible branch; only these addresses can be used"),
         }
     }
 }
 
 impl Clone for Interface {
+    #[allow(clippy::cast_ref_to_mut)]
     fn clone(&self) -> Self {
         let uart = unsafe { &mut *(self.uart as *const UART as *mut UART) };
         Self { uart }
