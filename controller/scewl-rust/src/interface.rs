@@ -5,7 +5,7 @@ use core::fmt::{Debug, Error as FmtError, Result as FmtResult};
 use core::result::Result as CoreResult;
 use cortex_m::asm;
 use cty::uintptr_t;
-use volatile_register::*;
+use volatile_register::{RO, RW, WO};
 
 #[repr(C)]
 struct UART {

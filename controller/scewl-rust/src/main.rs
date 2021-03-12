@@ -20,8 +20,11 @@ use cortex_m_rt::exception;
 use crate::controller::SCEWLSSSOp::{Deregister, Register};
 use crate::controller::SCEWLStatus::NoMessage;
 use crate::crypto::{AESCryptoHandler, AuthHandler, NopAuthHandler};
-use crate::interface::INTF::*;
-use controller::*;
+use crate::interface::INTF::{CPU, RAD, SSS};
+use controller::{
+    SCEWLClient, SCEWLHeader, SCEWLKnownId, SCEWLMessage, SCEWLResult, SCEWLSSSMessage, ScewlId,
+    SCEWL_MAX_DATA_SZ,
+};
 use core::cmp::min;
 use core::mem::size_of;
 use core::str::FromStr;
@@ -121,7 +124,7 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
 
         for item in &mut [&mut hdr.tgt_id, &mut hdr.src_id, &mut hdr.len] {
             let mut buf = [0_u8; size_of::<u16>()];
-            if let Err(_) = intf.read(&mut buf, size_of::<u16>(), blocking) {
+            if intf.read(&mut buf, size_of::<u16>(), blocking).is_err() {
                 return Err(NoMessage);
             }
             **item = u16::from_ne_bytes(buf);
@@ -138,7 +141,7 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
 
         if len < hdr.len as usize {
             for _ in len..hdr.len as usize {
-                if let Err(_) = intf.readb(false) {
+                if intf.readb(false).is_err() {
                     break; // fail fast, don't discard new messages
                 }
             }
@@ -282,14 +285,17 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
             *b1 = *b2;
         }
 
-        if let Err(_) = self.send_msg(
-            SSS,
-            &SCEWLMessage {
-                src_id: self.id,
-                tgt_id: SCEWLKnownId::SSS as u16,
-                len: 4,
-            },
-        ) {
+        if self
+            .send_msg(
+                SSS,
+                &SCEWLMessage {
+                    src_id: self.id,
+                    tgt_id: SCEWLKnownId::SSS as u16,
+                    len: 4,
+                },
+            )
+            .is_err()
+        {
             return false;
         }
 
@@ -298,7 +304,7 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
             Err(_) => return false,
         };
 
-        if let Err(_) = self.send_msg(CPU, &res) {
+        if self.send_msg(CPU, &res).is_err() {
             return false;
         }
 
@@ -314,14 +320,17 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
             *b1 = *b2;
         }
 
-        if let Err(_) = self.send_msg(
-            SSS,
-            &SCEWLMessage {
-                src_id: self.id,
-                tgt_id: SCEWLKnownId::SSS as u16,
-                len: 4,
-            },
-        ) {
+        if self
+            .send_msg(
+                SSS,
+                &SCEWLMessage {
+                    src_id: self.id,
+                    tgt_id: SCEWLKnownId::SSS as u16,
+                    len: 4,
+                },
+            )
+            .is_err()
+        {
             return false;
         }
 
@@ -330,7 +339,7 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
             Err(_) => return false,
         };
 
-        if let Err(_) = self.send_msg(CPU, &res) {
+        if self.send_msg(CPU, &res).is_err() {
             return false;
         }
 
