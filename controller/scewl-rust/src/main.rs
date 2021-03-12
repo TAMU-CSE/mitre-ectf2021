@@ -125,16 +125,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         };
 
         #[cfg(feature = "semihosted")]
-        {
-            match self.data.iter().zip(0..).find(|(b, _)| **b == 0) {
-                None => {
-                    hprintln!("Read: {:?}: {:?}", message, self.data).ok();
-                }
-                Some((_, i)) => {
-                    hprintln!("Read: {:?}: {:?}", message, &self.data[..i]).ok();
-                }
-            }
-        }
+        hprintln!("Read: {:?}: {:?}", message, &self.data[..message.len]).ok();
 
         match res {
             Ok(read) => {
@@ -163,16 +154,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         intf.write(self.data, message.len);
 
         #[cfg(feature = "semihosted")]
-        {
-            match self.data.iter().zip(0..).find(|(b, _)| **b == 0) {
-                None => {
-                    hprintln!("Sent: {:?}: {:?}", message, self.data).ok();
-                }
-                Some((_, i)) => {
-                    hprintln!("Sent: {:?}: {:?}", message, &self.data[..i]).ok();
-                }
-            }
-        }
+        hprintln!("Read: {:?}: {:?}", message, &self.data[..message.len]).ok();
 
         Ok(())
     }
