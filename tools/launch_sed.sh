@@ -15,7 +15,7 @@
 set -e
 
 # optionally enable semihosting
-if [[ -z "$SEMIHOSTED" ]]; then SEMIHOSTING_ARG="-semihosting-config enable=on,target=native"; fi
+if [[ -n "$SEMIHOSTED" ]]; then SEMIHOSTING_ARG="-semihosting-config enable=on,target=native"; fi
 
 # launch controller
 CONTROLLER=`docker run -d \
