@@ -4,8 +4,9 @@
 #![allow(non_camel_case_types)]
 #![allow(non_snake_case)]
 
-pub mod controller;
-pub mod interface;
+mod controller;
+mod crypto;
+mod interface;
 
 #[cfg(feature = "semihosted")]
 use cortex_m_semihosting::hprintln;
@@ -20,6 +21,7 @@ use cortex_m_rt::exception;
 
 use crate::controller::SCEWLSSSOp::{Deregister, Register};
 use crate::controller::SCEWLStatus::NoMessage;
+use crate::crypto::{CryptoHandler, NopCryptoHandler};
 use crate::interface::INTF::*;
 use controller::*;
 use core::cmp::min;
@@ -29,16 +31,20 @@ use interface::{Interface, INTF};
 
 const SCEWL_ID: &'static str = env!("SCEWL_ID");
 
-struct DefaultClient<'a> {
+struct DefaultClient<'a, T>
+where
+    T: CryptoHandler + Sized,
+{
     id: scewl_id,
     cpu: Interface,
     sss: Interface,
     rad: Interface,
     data: &'a mut [u8; SCEWL_MAX_DATA_SZ],
+    crypto: T,
     registered: bool,
 }
 
-impl<'a> DefaultClient<'a> {
+impl<'a> DefaultClient<'a, NopCryptoHandler> {
     fn new(buf: &'a mut [u8; SCEWL_MAX_DATA_SZ]) -> Self {
         DefaultClient {
             id: scewl_id::from_str(SCEWL_ID).unwrap(),
@@ -46,12 +52,13 @@ impl<'a> DefaultClient<'a> {
             sss: Interface::new(SSS),
             rad: Interface::new(RAD),
             data: buf,
+            crypto: NopCryptoHandler {},
             registered: false,
         }
     }
 }
 
-impl<'a> SCEWLClient for DefaultClient<'a> {
+impl<'a, T: CryptoHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
     fn get_intf(&self, intf: INTF) -> Interface {
         match intf {
             CPU => &self.cpu,
@@ -110,6 +117,10 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         let len = min(hdr.len, len) as usize;
         let res = intf.read(self.data, len, blocking);
 
+        if hdr.src_id != SCEWLKnownId::FAA as u16 {
+            self.crypto.decrypt(&mut self.data, len);
+        }
+
         if len < hdr.len as usize {
             for _ in len..hdr.len as usize {
                 if let Err(_) = intf.readb(false) {
@@ -145,7 +156,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         }
     }
 
-    fn send_msg(&self, intf: INTF, message: &SCEWLMessage) -> SCEWLResult<()> {
+    fn send_msg(&mut self, intf: INTF, message: &SCEWLMessage) -> SCEWLResult<()> {
         let mut intf = self.get_intf(intf);
         let hdr = SCEWLHeader {
             magic_s: b'S',
@@ -156,6 +167,10 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         };
 
         intf.write(&hdr.to_bytes(), 8); // magic number; size of the header
+
+        if hdr.tgt_id != SCEWLKnownId::FAA as u16 {
+            self.crypto.encrypt(&mut self.data, message.len);
+        }
 
         intf.write(self.data, message.len);
 
@@ -171,7 +186,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         Ok(())
     }
 
-    fn handle_scewl_recv(&self, src_id: scewl_id, len: usize) -> SCEWLResult<()> {
+    fn handle_scewl_recv(&mut self, src_id: scewl_id, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             CPU,
             &SCEWLMessage {
@@ -182,7 +197,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         )
     }
 
-    fn handle_scewl_send(&self, tgt_id: scewl_id, len: usize) -> SCEWLResult<()> {
+    fn handle_scewl_send(&mut self, tgt_id: scewl_id, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             RAD,
             &SCEWLMessage {
@@ -193,7 +208,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         )
     }
 
-    fn handle_brdcst_recv(&self, src_id: scewl_id, len: usize) -> SCEWLResult<()> {
+    fn handle_brdcst_recv(&mut self, src_id: scewl_id, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             CPU,
             &SCEWLMessage {
@@ -204,7 +219,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         )
     }
 
-    fn handle_brdcst_send(&self, len: usize) -> SCEWLResult<()> {
+    fn handle_brdcst_send(&mut self, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             RAD,
             &SCEWLMessage {
@@ -215,7 +230,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         )
     }
 
-    fn handle_faa_recv(&self, len: usize) -> SCEWLResult<()> {
+    fn handle_faa_recv(&mut self, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             CPU,
             &SCEWLMessage {
@@ -226,7 +241,7 @@ impl<'a> SCEWLClient for DefaultClient<'a> {
         )
     }
 
-    fn handle_faa_send(&self, len: usize) -> SCEWLResult<()> {
+    fn handle_faa_send(&mut self, len: usize) -> SCEWLResult<()> {
         self.send_msg(
             RAD,
             &SCEWLMessage {

@@ -85,16 +85,16 @@ pub trait SCEWLClient {
     fn get_intf(&self, intf: INTF) -> Interface;
 
     fn read_msg(&mut self, intf: INTF, len: u16, blocking: bool) -> SCEWLResult<SCEWLMessage>;
-    fn send_msg(&self, intf: INTF, message: &SCEWLMessage) -> SCEWLResult<()>;
+    fn send_msg(&mut self, intf: INTF, message: &SCEWLMessage) -> SCEWLResult<()>;
 
-    fn handle_scewl_recv(&self, src_id: scewl_id, len: usize) -> SCEWLResult<()>;
-    fn handle_scewl_send(&self, tgt_id: scewl_id, len: usize) -> SCEWLResult<()>;
+    fn handle_scewl_recv(&mut self, src_id: scewl_id, len: usize) -> SCEWLResult<()>;
+    fn handle_scewl_send(&mut self, tgt_id: scewl_id, len: usize) -> SCEWLResult<()>;
 
-    fn handle_brdcst_recv(&self, src_id: scewl_id, len: usize) -> SCEWLResult<()>;
-    fn handle_brdcst_send(&self, len: usize) -> SCEWLResult<()>;
+    fn handle_brdcst_recv(&mut self, src_id: scewl_id, len: usize) -> SCEWLResult<()>;
+    fn handle_brdcst_send(&mut self, len: usize) -> SCEWLResult<()>;
 
-    fn handle_faa_recv(&self, len: usize) -> SCEWLResult<()>;
-    fn handle_faa_send(&self, len: usize) -> SCEWLResult<()>;
+    fn handle_faa_recv(&mut self, len: usize) -> SCEWLResult<()>;
+    fn handle_faa_send(&mut self, len: usize) -> SCEWLResult<()>;
 
     fn handle_registration(&mut self) -> SCEWLResult<()>;
 
