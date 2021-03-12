@@ -164,7 +164,7 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
 
         match res {
             Ok(read) => {
-                if read < len {
+                if read < message.len {
                     Err(NoMessage)
                 } else {
                     Ok(message)
@@ -176,23 +176,24 @@ impl<'a, T: AuthHandler + Sized> SCEWLClient for DefaultClient<'a, T> {
 
     fn send_msg(&mut self, intf: INTF, message: &SCEWLMessage) -> SCEWLResult<()> {
         let mut intf = self.get_intf(intf);
-        let hdr = SCEWLHeader {
-            magic_s: b'S',
-            magic_c: b'C',
-            tgt_id: message.tgt_id,
-            src_id: message.src_id,
-            len: message.len as u16,
-        };
 
-        intf.write(&hdr.to_bytes(), 8); // magic number; size of the header
-
-        let actual = if intf.named() == INTF::RAD && hdr.src_id != SCEWLKnownId::FAA as u16 {
+        let actual = if intf.named() == INTF::RAD && message.tgt_id != SCEWLKnownId::FAA as u16 {
             self.crypto.encrypt(&mut self.data, message.len)
         } else {
             message.len
         };
 
-        intf.write(self.data, actual);
+        let hdr = SCEWLHeader {
+            magic_s: b'S',
+            magic_c: b'C',
+            tgt_id: message.tgt_id,
+            src_id: message.src_id,
+            len: actual as u16,
+        };
+
+        intf.write(&hdr.to_bytes(), 8); // magic number; size of the header
+
+        intf.write(self.data, hdr.len as usize);
 
         #[cfg(feature = "semihosted")]
         hprintln!("Send: {:?} {:?}: {:?}", intf, message, &self.data[..actual]).ok();

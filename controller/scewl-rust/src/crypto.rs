@@ -1,7 +1,7 @@
 use crate::controller::SCEWL_MAX_DATA_SZ;
 use aes::Aes128;
 use block_modes::block_padding::Pkcs7;
-use block_modes::{BlockMode, Cbc};
+use block_modes::{BlockMode, BlockModeError, Cbc};
 use core::mem::size_of;
 use rand::{RngCore, SeedableRng};
 use rand_hc::Hc128Rng;
@@ -72,12 +72,14 @@ impl AuthHandler for AESCryptoHandler {
         actual
     }
 
-    fn decrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], len: usize) -> usize {
+    fn decrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], len: usize) -> Option<usize> {
         let mut iv = [0_u8; AESCryptoHandler::DEC_HEADER];
         iv.copy_from_slice(&data[..AESCryptoHandler::DEC_HEADER]);
         let cbc = Aes128Cbc::new_var(&self.key, &iv).unwrap();
-        cbc.decrypt(&mut data[AESCryptoHandler::DEC_HEADER..block_roundup(len)])
-            .unwrap();
+        match cbc.decrypt(&mut data[AESCryptoHandler::DEC_HEADER..len]) {
+            Ok(_) => {}
+            Err(_) => return None,
+        }
         let mut len = [0_u8; size_of::<usize>()];
         for (to, from) in len.iter_mut().zip(
             data[AESCryptoHandler::DEC_HEADER
