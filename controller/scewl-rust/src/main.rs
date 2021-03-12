@@ -23,7 +23,7 @@ use crate::controller::SCEWLStatus::NoMessage;
 use crate::interface::INTF::*;
 use controller::*;
 use core::cmp::min;
-use core::mem::size_of;
+use core::mem::{size_of, size_of_val};
 use core::str::FromStr;
 use interface::{Interface, INTF};
 
@@ -306,7 +306,7 @@ fn main() -> ! {
     let mut client = DefaultClient::new(&mut data);
 
     loop {
-        if let Ok(msg) = client.read_msg(CPU, SCEWL_MAX_DATA_SZ as u16, true) {
+        if let Ok(msg) = client.read_msg(CPU, size_of_val(&data) as u16, true) {
             if msg.tgt_id == SCEWLKnownId::SSS as u16 {
                 let _ignored = client.handle_registration();
             }
@@ -314,7 +314,7 @@ fn main() -> ! {
 
         while client.registered {
             if client.cpu.avail() {
-                if let Ok(msg) = client.read_msg(INTF::CPU, SCEWL_MAX_DATA_SZ as u16, true) {
+                if let Ok(msg) = client.read_msg(INTF::CPU, size_of_val(&data) as u16, true) {
                     let _ignored = if msg.tgt_id == SCEWLKnownId::Broadcast as u16 {
                         client.handle_brdcst_send(msg.len)
                     } else if msg.tgt_id == SCEWLKnownId::SSS as u16 {
@@ -322,7 +322,7 @@ fn main() -> ! {
                     } else if msg.tgt_id == SCEWLKnownId::FAA as u16 {
                         client.handle_faa_send(msg.len)
                     } else {
-                        client.handle_scewl_send(msg.src_id, msg.len)
+                        client.handle_scewl_send(msg.tgt_id, msg.len)
                     };
 
                     continue;
@@ -330,7 +330,7 @@ fn main() -> ! {
             }
 
             if client.rad.avail() {
-                if let Ok(msg) = client.read_msg(INTF::RAD, SCEWL_MAX_DATA_SZ as u16, true) {
+                if let Ok(msg) = client.read_msg(INTF::RAD, size_of_val(&data) as u16, true) {
                     let _ignored = if msg.tgt_id == SCEWLKnownId::Broadcast as u16 {
                         client.handle_brdcst_recv(msg.src_id, msg.len)
                     } else if msg.tgt_id == client.id {
