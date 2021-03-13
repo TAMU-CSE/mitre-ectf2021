@@ -12,7 +12,7 @@ FROM ectf/ectf-qemu:latest
 # Add environment customizations here
 # NOTE: do this first so Docker can used cached containers to skip reinstalling everything
 RUN apt-get update && apt-get upgrade -y && \
-    apt-get install -y build-essential binutils-arm-none-eabi clang curl gcc-arm-none-eabi make
+    apt-get install -y build-essential binutils-arm-none-eabi clang curl gcc-arm-none-eabi
 
 SHELL ["/bin/bash", "-c"]
 
