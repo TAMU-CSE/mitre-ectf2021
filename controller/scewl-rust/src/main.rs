@@ -27,9 +27,7 @@ fn main() -> ! {
     let mut data = [0_u8; SCEWL_MAX_DATA_SZ];
     let mut client = Controller::new(&mut data, trivial::DefaultHandler);
 
-    loop {
-        client.run()
-    }
+    client.run()
 }
 
 // disable exception handling because we're lazy

@@ -354,43 +354,45 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         }
     }
 
-    pub fn run(&mut self) {
-        if let Ok(msg) = self.read_msg(&CPU, SCEWL_MAX_DATA_SZ as u16, true) {
-            if msg.tgt_id == KnownId::SSS as u16 {
-                let _ignored = self.handle_registration();
-            }
-        }
-
-        while self.registered() {
-            if self.cpu.avail() {
-                if let Ok(msg) = self.read_msg(&CPU, SCEWL_MAX_DATA_SZ as u16, true) {
-                    let _ignored = if msg.tgt_id == KnownId::Broadcast as u16 {
-                        self.handle_brdcst_send(msg.len).is_ok()
-                    } else if msg.tgt_id == KnownId::SSS as u16 {
-                        self.handle_registration()
-                    } else if msg.tgt_id == KnownId::FAA as u16 {
-                        self.handle_faa_send(msg.len).is_ok()
-                    } else {
-                        self.handle_scewl_send(msg.tgt_id, msg.len).is_ok()
-                    };
-
-                    continue;
+    pub fn run(&mut self) -> ! {
+        loop {
+            if let Ok(msg) = self.read_msg(&CPU, SCEWL_MAX_DATA_SZ as u16, true) {
+                if msg.tgt_id == KnownId::SSS as u16 {
+                    let _ignored = self.handle_registration();
                 }
             }
 
-            if self.rad.avail() {
-                if let Ok(msg) = self.read_msg(&RAD, SCEWL_MAX_DATA_SZ as u16, true) {
-                    let _ignored = if msg.tgt_id == KnownId::Broadcast as u16 {
-                        self.handle_brdcst_recv(msg.src_id, msg.len).is_ok()
-                    } else if msg.tgt_id == self.id {
-                        if msg.src_id == KnownId::FAA as u16 {
-                            self.handle_faa_recv(msg.len).is_ok()
+            while self.registered() {
+                if self.cpu.avail() {
+                    if let Ok(msg) = self.read_msg(&CPU, SCEWL_MAX_DATA_SZ as u16, true) {
+                        let _ignored = if msg.tgt_id == KnownId::Broadcast as u16 {
+                            self.handle_brdcst_send(msg.len).is_ok()
+                        } else if msg.tgt_id == KnownId::SSS as u16 {
+                            self.handle_registration()
+                        } else if msg.tgt_id == KnownId::FAA as u16 {
+                            self.handle_faa_send(msg.len).is_ok()
                         } else {
-                            self.handle_scewl_recv(msg.src_id, msg.len).is_ok()
-                        }
-                    } else {
+                            self.handle_scewl_send(msg.tgt_id, msg.len).is_ok()
+                        };
+
                         continue;
-                    };
+                    }
+                }
+
+                if self.rad.avail() {
+                    if let Ok(msg) = self.read_msg(&RAD, SCEWL_MAX_DATA_SZ as u16, true) {
+                        let _ignored = if msg.tgt_id == KnownId::Broadcast as u16 {
+                            self.handle_brdcst_recv(msg.src_id, msg.len).is_ok()
+                        } else if msg.tgt_id == self.id {
+                            if msg.src_id == KnownId::FAA as u16 {
+                                self.handle_faa_recv(msg.len).is_ok()
+                            } else {
+                                self.handle_scewl_recv(msg.src_id, msg.len).is_ok()
+                            }
+                        } else {
+                            continue;
+                        };
+                    }
                 }
             }
         }
