@@ -2,11 +2,10 @@
 #![no_main]
 #![warn(clippy::pedantic)]
 
-use crate::controller::{Controller, SCEWL_MAX_DATA_SZ};
+use crate::controller::{Controller, Id, SCEWL_MAX_DATA_SZ};
+use core::str::FromStr;
 use cortex_m_rt::entry;
 use cortex_m_rt::exception;
-#[cfg(feature = "semihosted")]
-use cortex_m_semihosting::hprintln;
 use lm3s6965 as _;
 #[cfg(not(feature = "semihosted"))]
 use panic_halt as _;
@@ -25,7 +24,11 @@ const SCEWL_ID: &str = env!("SCEWL_ID");
 #[entry]
 fn main() -> ! {
     let mut data = [0_u8; SCEWL_MAX_DATA_SZ];
-    let mut client = Controller::new(&mut data, trivial::DefaultHandler);
+    let mut client = Controller::new(
+        Id::from_str(SCEWL_ID).unwrap(),
+        &mut data,
+        trivial::DefaultHandler,
+    );
 
     client.run()
 }

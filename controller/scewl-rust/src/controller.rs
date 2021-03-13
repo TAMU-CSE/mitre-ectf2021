@@ -6,9 +6,9 @@ use crate::controller::Status::NoMessage;
 use crate::crypto::Handler as CryptoHandler;
 use crate::interface::INTF::{CPU, RAD, SSS};
 use crate::interface::{Interface, INTF};
-use crate::SCEWL_ID;
 use core::result::Result as CoreResult;
-use core::str::FromStr;
+#[cfg(feature = "semihosted")]
+use cortex_m_semihosting::hprintln;
 
 pub const SCEWL_MAX_DATA_SZ: usize = 0x4000 * 2;
 
@@ -121,9 +121,9 @@ where
 }
 
 impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, C> {
-    pub fn new(buf: &'a mut [u8; SCEWL_MAX_DATA_SZ], auth: A) -> Self {
+    pub fn new(id: Id, buf: &'a mut [u8; SCEWL_MAX_DATA_SZ], auth: A) -> Self {
         Controller {
-            id: Id::from_str(SCEWL_ID).unwrap(),
+            id,
             cpu: Interface::new(CPU),
             sss: Interface::new(SSS),
             rad: Interface::new(RAD),
@@ -256,7 +256,13 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         intf.write(self.data, hdr.len as usize);
 
         #[cfg(feature = "semihosted")]
-        hprintln!("Send: {:?} {:?}: {:?}", intf, message, &self.data[..actual]).ok();
+        hprintln!(
+            "Send: {:?} {:?}: {:?}",
+            intf,
+            message,
+            &self.data[..hdr.len as usize]
+        )
+        .ok();
 
         Ok(())
     }
