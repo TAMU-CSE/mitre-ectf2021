@@ -78,9 +78,9 @@ impl Interface {
     }
 
     pub fn read(&mut self, buf: &mut [u8], n: usize, blocking: bool) -> Result<usize> {
-        for i in 0..n {
+        for (i, b) in buf.iter_mut().enumerate().take(n) {
             match self.readb(blocking) {
-                Ok(b) => buf[i] = b,
+                Ok(res) => *b = res,
                 Err(_) => return Result::Ok(i),
             }
         }
@@ -95,8 +95,8 @@ impl Interface {
     }
 
     pub fn write(&mut self, buf: &[u8], len: usize) -> usize {
-        for i in 0..len {
-            self.writeb(buf[i]);
+        for b in buf.iter().take(len) {
+            self.writeb(*b);
         }
         len
     }
