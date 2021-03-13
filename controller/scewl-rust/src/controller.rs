@@ -47,7 +47,7 @@ impl SSSMessage {
         let mut bytes = [0_u8; 4];
         bytes[..size_of::<Id>()].clone_from_slice(&self.dev_id.to_ne_bytes());
         bytes[size_of::<Id>()..(size_of::<Id>() * 2)]
-            .clone_from_slice(&(self.op as i32).to_ne_bytes());
+            .clone_from_slice(&(self.op as i16).to_ne_bytes());
         bytes
     }
 
