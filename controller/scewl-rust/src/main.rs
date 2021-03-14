@@ -1,4 +1,4 @@
-// Generate this documentation in a prettier form with `cargo doc --release --open`
+// Generate this documentation in a prettier form with `SCEWL_ID=14 cargo doc --release --open`
 
 //! CaptureTheFlaggies controller implementation for MITRE eCTF!
 //!
