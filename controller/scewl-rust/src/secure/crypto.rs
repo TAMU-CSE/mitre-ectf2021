@@ -12,17 +12,22 @@ use crate::crypto::Handler;
 type Aes128Cbc = Cbc<Aes128, Pkcs7>;
 
 pub struct AESCryptoHandler {
-    key: [u8; 16],
     random: Hc128Rng,
+    aes_key: [u8; 16],
+    hmac_key: [u8; 16],
 }
 
 impl AESCryptoHandler {
     const DEC_HEADER: usize = size_of::<[u8; 16]>();
     const ENC_HEADER: usize = size_of::<usize>();
 
-    pub fn new(key: [u8; 16], seed: [u8; 32]) -> Self {
+    pub fn new(seed: [u8; 32], aes_key: [u8; 16], hmac_key: [u8; 16]) -> Self {
         let random = Hc128Rng::from_seed(seed);
-        Self { key, random }
+        Self {
+            random,
+            aes_key,
+            hmac_key,
+        }
     }
 }
 
@@ -45,7 +50,7 @@ impl Handler for AESCryptoHandler {
         ) {
             *to = *from;
         }
-        let cbc = Aes128Cbc::new_var(&self.key, &iv).unwrap();
+        let cbc = Aes128Cbc::new_var(&self.aes_key, &iv).unwrap();
         let actual = block_roundup(newlen);
         cbc.encrypt(
             &mut data[AESCryptoHandler::DEC_HEADER..actual],
@@ -63,7 +68,7 @@ impl Handler for AESCryptoHandler {
     fn decrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> Option<Message> {
         let mut iv = [0_u8; AESCryptoHandler::DEC_HEADER];
         iv.copy_from_slice(&data[..AESCryptoHandler::DEC_HEADER]);
-        let cbc = Aes128Cbc::new_var(&self.key, &iv).unwrap();
+        let cbc = Aes128Cbc::new_var(&self.aes_key, &iv).unwrap();
         if cbc
             .decrypt(&mut data[AESCryptoHandler::DEC_HEADER..message.len])
             .is_err()
