@@ -1,11 +1,9 @@
 use core::iter::Iterator;
 use core::option::Option;
-use core::option::Option::{None, Some};
 use core::result::Result::{Err, Ok};
 
 use crate::auth::Handler;
-use crate::controller::SSSOp::{Deregister, Register};
-use crate::controller::{Controller, KnownId, Message, SSSMessage};
+use crate::controller::{Controller, Id, Message, SSSMessage, SSSOp};
 use crate::interface::INTF::{CPU, SSS};
 use crate::trivial::NopCryptoHandler;
 
@@ -19,7 +17,7 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
     ) -> Option<NopCryptoHandler> {
         let message = SSSMessage {
             dev_id: controller.id(),
-            op: Register,
+            op: SSSOp::Register,
         };
         for (b1, b2) in controller.data().iter_mut().zip(&message.to_bytes()) {
             *b1 = *b2;
@@ -30,7 +28,7 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
                 &SSS,
                 &Message {
                     src_id: controller.id(),
-                    tgt_id: KnownId::SSS as u16,
+                    tgt_id: Id::SSS,
                     len: 4,
                 },
             )
@@ -48,17 +46,13 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
             return None;
         }
 
-        if SSSMessage::from_bytes(controller.data()).op == Register {
-            Some(NopCryptoHandler)
-        } else {
-            None
-        }
+        (SSSMessage::from_bytes(controller.data()).op == SSSOp::Register).then(|| NopCryptoHandler)
     }
 
     fn sss_deregister(self, controller: &mut Controller<Self, NopCryptoHandler>) -> bool {
         let message = SSSMessage {
             dev_id: controller.id(),
-            op: Deregister,
+            op: SSSOp::Deregister,
         };
         for (b1, b2) in controller.data().iter_mut().zip(&message.to_bytes()) {
             *b1 = *b2;
@@ -69,7 +63,7 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
                 &SSS,
                 &Message {
                     src_id: controller.id(),
-                    tgt_id: KnownId::SSS as u16,
+                    tgt_id: Id::SSS,
                     len: 4,
                 },
             )
@@ -87,6 +81,6 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
             return false;
         }
 
-        SSSMessage::from_bytes(controller.data()).op == Deregister
+        SSSMessage::from_bytes(controller.data()).op == SSSOp::Deregister
     }
 }
