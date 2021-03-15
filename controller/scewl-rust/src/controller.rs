@@ -271,70 +271,70 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         if self.crypto.is_none() {
             return Err(Status::Err);
         }
-        let actual = match self.crypto.as_mut().unwrap().decrypt(&mut self.data, len) {
+        let actual = match self.crypto.as_mut().unwrap().decrypt(
+            &mut self.data,
+            Message {
+                tgt_id: self.id,
+                src_id,
+                len,
+            },
+        ) {
             None => return Err(Status::Err),
             Some(len) => len,
         };
 
-        self.send_msg(
-            &CPU,
-            &Message {
-                src_id,
-                tgt_id: self.id,
-                len: actual,
-            },
-        )
+        self.send_msg(&CPU, &actual)
     }
 
     fn handle_scewl_send(&mut self, tgt_id: Id, len: usize) -> Result<()> {
         if self.crypto.is_none() {
             return Err(Status::Err);
         }
-        let actual = self.crypto.as_mut().unwrap().encrypt(&mut self.data, len);
-
-        self.send_msg(
-            &RAD,
-            &Message {
-                src_id: self.id,
+        let actual = self.crypto.as_mut().unwrap().encrypt(
+            &mut self.data,
+            Message {
                 tgt_id,
-                len: actual,
+                src_id: self.id,
+                len,
             },
-        )
+        );
+
+        self.send_msg(&RAD, &actual)
     }
 
     fn handle_brdcst_recv(&mut self, src_id: Id, len: usize) -> Result<()> {
         if self.crypto.is_none() {
             return Err(Status::Err);
         }
-        let actual = match self.crypto.as_mut().unwrap().decrypt(&mut self.data, len) {
+        let actual = match self.crypto.as_mut().unwrap().decrypt(
+            &mut self.data,
+            Message {
+                tgt_id: KnownId::Broadcast as u16,
+                src_id,
+                len,
+            },
+        ) {
             None => return Err(Status::Err),
             Some(len) => len,
         };
 
-        self.send_msg(
-            &CPU,
-            &Message {
-                src_id,
-                tgt_id: KnownId::Broadcast as u16,
-                len: actual,
-            },
-        )
+        self.send_msg(&CPU, &actual)
     }
 
     fn handle_brdcst_send(&mut self, len: usize) -> Result<()> {
         if self.crypto.is_none() {
             return Err(Status::Err);
         }
-        let actual = self.crypto.as_mut().unwrap().encrypt(&mut self.data, len);
-
-        self.send_msg(
-            &RAD,
-            &Message {
-                src_id: self.id,
+        let actual = self.crypto.as_mut().unwrap().encrypt(
+            &mut self.data,
+            Message {
                 tgt_id: KnownId::Broadcast as u16,
-                len: actual,
+                src_id: self.id,
+                len,
             },
-        )
+        );
+
+        self.send_msg(&RAD, &actual)
     }
 
     fn handle_faa_recv(&mut self, len: usize) -> Result<()> {
