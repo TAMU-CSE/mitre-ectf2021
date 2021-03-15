@@ -1,7 +1,7 @@
+use crate::controller::SCEWL_MAX_DATA_SZ;
+use crate::crypto::Handler;
 use core::option::Option;
 use core::option::Option::Some;
-use crate::crypto::Handler;
-use crate::controller::SCEWL_MAX_DATA_SZ;
 
 pub struct NopCryptoHandler;
 

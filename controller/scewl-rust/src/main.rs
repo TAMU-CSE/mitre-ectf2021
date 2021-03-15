@@ -1,4 +1,4 @@
-// Generate this documentation in a prettier form with `SCEWL_ID=14 cargo doc --release --open`
+// Generate this documentation in a prettier form with `cargo doc --release --open`
 
 //! CaptureTheFlaggies controller implementation for MITRE eCTF!
 //!
@@ -101,9 +101,9 @@
 #![no_std]
 #![no_main]
 #![warn(clippy::pedantic)] // enforce pedantic checks -- false positive prone
-#![forbid(clippy::missing_docs_in_private_items)] // enforce documentation
+#![deny(clippy::missing_docs_in_private_items)] // enforce documentation
 
-use crate::controller::{Controller, Id, SCEWL_MAX_DATA_SZ};
+use crate::controller::{Controller, SCEWL_MAX_DATA_SZ};
 use core::str::FromStr;
 use cortex_m_rt::entry;
 use cortex_m_rt::exception;
@@ -120,13 +120,18 @@ mod interface;
 mod secure;
 mod trivial;
 
+#[cfg(not(doc))]
+#[allow(clippy::missing_docs_in_private_items)]
 const SCEWL_ID: &str = env!("SCEWL_ID");
+#[doc(hidden)]
+#[cfg(doc)]
+const SCEWL_ID: &str = "0";
 
 #[entry]
 fn main() -> ! {
     let mut data = [0_u8; SCEWL_MAX_DATA_SZ];
     let mut client = Controller::new(
-        Id::from_str(SCEWL_ID).unwrap(),
+        u16::from_str(SCEWL_ID).unwrap().into(),
         &mut data,
         trivial::DefaultHandler,
     );
