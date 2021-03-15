@@ -65,7 +65,7 @@ impl Handler for AESCryptoHandler {
         iv.copy_from_slice(&data[..AESCryptoHandler::DEC_HEADER]);
         let cbc = Aes128Cbc::new_var(&self.key, &iv).unwrap();
         if cbc
-            .decrypt(&mut data[AESCryptoHandler::DEC_HEADER..len])
+            .decrypt(&mut data[AESCryptoHandler::DEC_HEADER..message.len])
             .is_err()
         {
             return None;
