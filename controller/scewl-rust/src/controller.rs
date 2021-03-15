@@ -111,10 +111,10 @@ impl MessageHeader {
         let mut bytes = [0_u8; 8];
         bytes[0] = b'S';
         bytes[1] = b'C';
-        bytes[2..(2 + size_of::<Id>())].clone_from_slice(&u16::from(self.tgt_id).to_ne_bytes());
-        bytes[(2 + size_of::<Id>())..(2 + size_of::<Id>() * 2)]
+        bytes[2..(2 + size_of::<u16>())].clone_from_slice(&u16::from(self.tgt_id).to_ne_bytes());
+        bytes[(2 + size_of::<u16>())..(2 + size_of::<u16>() * 2)]
             .clone_from_slice(&u16::from(self.src_id).to_ne_bytes());
-        bytes[(2 + size_of::<Id>() * 2)..(2 + size_of::<Id>() * 3)]
+        bytes[(2 + size_of::<u16>() * 2)..(2 + size_of::<u16>() * 3)]
             .clone_from_slice(&self.len.to_ne_bytes());
         bytes
     }
@@ -137,8 +137,8 @@ impl SSSMessage {
     /// Serialise the SSS message to a byte array
     pub fn to_bytes(&self) -> [u8; 4] {
         let mut bytes = [0_u8; 4];
-        bytes[..size_of::<Id>()].clone_from_slice(&u16::from(self.dev_id).to_ne_bytes());
-        bytes[size_of::<Id>()..(size_of::<Id>() * 2)]
+        bytes[..size_of::<u16>()].clone_from_slice(&u16::from(self.dev_id).to_ne_bytes());
+        bytes[size_of::<u16>()..SSSMessage::size()]
             .clone_from_slice(&i16::from(self.op).to_ne_bytes());
         bytes
     }
@@ -153,6 +153,10 @@ impl SSSMessage {
             dev_id: u16::from_ne_bytes(dev_id).into(),
             op: i16::from_ne_bytes(op).into(),
         }
+    }
+
+    pub const fn size() -> usize {
+        size_of::<u16>() + size_of::<i16>()
     }
 }
 
