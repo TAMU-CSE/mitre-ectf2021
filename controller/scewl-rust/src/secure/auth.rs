@@ -134,17 +134,11 @@ impl Handler<CryptoHandler> for SecureHandler {
 
         #[allow(clippy::cast_possible_truncation)]
         // truncation permissible for this response size
-        let resp = if let Ok(resp) =
-            controller.read_msg(&INTF::SSS, SecureSSSResponse::size() as u16, true)
-        {
-            if let Some(resp) = SecureSSSResponse::from_bytes(&controller.data()[..resp.len]) {
-                resp
-            } else {
-                return None;
-            }
-        } else {
-            return None;
-        };
+        let len = controller
+            .read_msg(&INTF::SSS, SecureSSSResponse::size() as u16, true)
+            .ok()?
+            .len;
+        let resp = SecureSSSResponse::from_bytes(&controller.data()[..len])?;
 
         let cpu_notify = SSSMessage {
             dev_id: resp.dev_id,
@@ -154,7 +148,7 @@ impl Handler<CryptoHandler> for SecureHandler {
 
         controller.data()[0..size_of_val(&cn_buf)].clone_from_slice(&cn_buf);
 
-        if controller
+        controller
             .send_msg(
                 &INTF::CPU,
                 &Message {
@@ -163,20 +157,13 @@ impl Handler<CryptoHandler> for SecureHandler {
                     len: SSSMessage::size(),
                 },
             )
-            .is_err()
-        {
-            return None;
-        }
+            .err()?;
 
-        if resp.seed.is_some() {
-            Some(CryptoHandler::new(
-                resp.seed.unwrap(),
-                resp.aes_key.unwrap(),
-                resp.hmac_key.unwrap(),
-            ))
-        } else {
-            None
-        }
+        Some(CryptoHandler::new(
+            resp.seed?,
+            resp.aes_key?,
+            resp.hmac_key?,
+        ))
     }
 
     fn sss_deregister(self, controller: &mut Controller<Self, CryptoHandler>) -> bool {

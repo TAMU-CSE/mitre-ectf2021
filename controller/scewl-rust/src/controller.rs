@@ -119,6 +119,18 @@ impl MessageHeader {
             .clone_from_slice(&self.len.to_ne_bytes());
         bytes
     }
+
+    /// Instantiates a `MessageHeader` based on the contents of a buffer according to the specification.
+    ///
+    /// While this type does not have the magicS and magicC fields, they are expected by this method.
+    fn from_bytes(buf: [u8; 8]) -> Self {
+        // ignore the first two bytes     
+        Self {
+            tgt_id: u16::from_ne_bytes([buf[2], buf[3]]).into(),
+            src_id: u16::from_ne_bytes([buf[4], buf[5]]).into(),
+            len: u16::from_ne_bytes([buf[6], buf[7]]).into(),
+        }
+    }
 }
 
 /// Container for SSS messages, according to the specification for SSS messages between the CPU and
@@ -147,10 +159,8 @@ impl SSSMessage {
 
     /// Deserialise the SSS message from a byte array
     pub fn from_bytes(data: &[u8]) -> SSSMessage {
-        let mut dev_id = [0_u8; 2];
-        dev_id.copy_from_slice(&data[0..2]);
-        let mut op = [0_u8; 2];
-        op.copy_from_slice(&data[2..4]);
+        let dev_id = [data[0], data[1]];
+        let op = [data[2], data[3]];
         SSSMessage {
             dev_id: u16::from_ne_bytes(dev_id).into(),
             op: i16::from_ne_bytes(op).into(),
@@ -169,7 +179,7 @@ impl SSSMessage {
 #[allow(dead_code)]
 pub enum Error {
     /// Indicates that an unknown error occurred
-    Err,
+    Unknown,
     /// Indicates that a message was already sent or received
     Already,
     /// Indicates that no message was sent or received
@@ -319,30 +329,20 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
     /// See the respective method for details on this post-processing operation.
     pub fn read_msg(&mut self, intf: &INTF, len: u16, blocking: bool) -> Result<Message> {
         let mut intf = self.get_intf(intf);
-        let mut hdr = MessageHeader::default();
 
-        for b in self.data[..len as usize].as_mut() {
-            *b = 0
-        }
+        self.data[..len as usize].as_mut().fill(0);
 
         loop {
-            let s;
-            let mut c = b'S';
-
-            match intf.readb(blocking) {
-                Ok(b) => s = b,
-                Err(_) => return Err(Error::NoMessage),
-            }
+            let s = intf.readb(blocking).map_err(|_| Error::NoMessage)?;
 
             if s != b'S' {
                 continue;
             }
 
+            let mut c = b'S';
+
             while c == b'S' {
-                match intf.readb(blocking) {
-                    Ok(b) => c = b,
-                    Err(_) => return Err(Error::NoMessage),
-                }
+                c = intf.readb(blocking).map_err(|_| Error::NoMessage)?;
             }
 
             if c == b'C' {
@@ -350,13 +350,9 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
             }
         }
 
-        for item in &mut [&mut hdr.tgt_id.into(), &mut hdr.src_id.into(), &mut hdr.len] {
-            let mut buf = [0_u8; size_of::<u16>()];
-            if intf.read(&mut buf, size_of::<u16>(), blocking).is_err() {
-                return Err(Error::NoMessage);
-            }
-            **item = u16::from_ne_bytes(buf);
-        }
+        let mut buf: [u8; 8] = [0_u8; 8];
+        intf.read(&mut buf[2..], 6, blocking).map_err(|_| Error::NoMessage)?;
+        let hdr = MessageHeader::from_bytes(buf);
 
         let len = min(hdr.len, len) as usize;
         let res = intf.read(self.data, len, blocking);
@@ -384,15 +380,10 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         )
         .ok();
 
-        match res {
-            Ok(read) => {
-                if read < message.len {
-                    Err(Error::NoMessage)
-                } else {
-                    Ok(message)
-                }
-            }
-            Err(_) => Err(Error::NoMessage),
+        if res.map_err(|_| Error::NoMessage)? < message.len {
+            Err(Error::NoMessage)
+        } else {
+            Ok(message)
         }
     }
 
@@ -437,23 +428,17 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
     /// message is from another SED and not a broadcast. The crypto handler's [decryption operation](crate::crypto::Handler::decrypt)
     /// will be invoked before this message is passed on to the CPU.
     fn handle_scewl_recv(&mut self, src_id: Id, len: usize) -> Result<()> {
-        if self.crypto.is_none() {
-            return Err(Error::Err);
-        }
         let mut message = Message {
             tgt_id: self.id,
             src_id,
             len,
         };
-        message.len = match self
+        message.len = self
             .crypto
             .as_mut()
-            .unwrap()
+            .ok_or(Error::Unknown)?
             .decrypt(&mut self.data, message)
-        {
-            None => return Err(Error::Err),
-            Some(message) => message,
-        };
+            .ok_or(Error::Unknown)?;
 
         self.send_msg(&CPU, &message)
     }
@@ -465,9 +450,6 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
     /// be sent is a direct message to another SED. The crypto handler's [encryption operation](crate::crypto::Handler::encrypt)
     /// will be invoked before this message is passed on to the radio.
     fn handle_scewl_send(&mut self, tgt_id: Id, len: usize) -> Result<()> {
-        if self.crypto.is_none() {
-            return Err(Error::Err);
-        }
         let mut message = Message {
             tgt_id,
             src_id: self.id,
@@ -476,7 +458,7 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         message.len = self
             .crypto
             .as_mut()
-            .unwrap()
+            .ok_or(Error::Unknown)?
             .encrypt(&mut self.data, message);
 
         self.send_msg(&RAD, &message)
@@ -490,23 +472,17 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
     /// message is from another SED and is a broadcast. The crypto handler's [decryption operation](crate::crypto::Handler::decrypt)
     /// will be invoked before this message is passed on to the CPU.
     fn handle_brdcst_recv(&mut self, src_id: Id, len: usize) -> Result<()> {
-        if self.crypto.is_none() {
-            return Err(Error::Err);
-        }
         let mut message = Message {
             tgt_id: Id::Broadcast,
             src_id,
             len,
         };
-        message.len = match self
+        message.len = self
             .crypto
             .as_mut()
-            .unwrap()
+            .ok_or(Error::Unknown)?
             .decrypt(&mut self.data, message)
-        {
-            None => return Err(Error::Err),
-            Some(len) => len,
-        };
+            .ok_or(Error::Unknown)?;
 
         self.send_msg(&CPU, &message)
     }
@@ -519,9 +495,6 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
     /// be sent is a broadcast. The crypto handler's [encryption operation](crate::crypto::Handler::encrypt)
     /// will be invoked before this message is passed on to the radio.
     fn handle_brdcst_send(&mut self, len: usize) -> Result<()> {
-        if self.crypto.is_none() {
-            return Err(Error::Err);
-        }
         let mut message = Message {
             tgt_id: Id::Broadcast,
             src_id: self.id,
@@ -530,7 +503,7 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         message.len = self
             .crypto
             .as_mut()
-            .unwrap()
+            .ok_or(Error::Unknown)?
             .encrypt(&mut self.data, message);
 
         self.send_msg(&RAD, &message)
