@@ -116,6 +116,7 @@ use panic_semihosting as _;
 mod auth;
 mod controller;
 mod crypto;
+mod cursor;
 mod interface;
 mod secure;
 mod trivial;

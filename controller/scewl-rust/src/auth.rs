@@ -15,7 +15,7 @@ use crate::crypto::Handler as CryptoHandler;
 /// It is expected that your SSS will define values necessary for communications between SEDs.
 /// Ensure that your `sss.py` sufficiently provides any secrets necessary for communications to
 /// the controller so that they may be used by your crypto handler.
-pub trait Handler<C: CryptoHandler + Sized>: Sized + Copy + Clone {
+pub trait Handler<C: CryptoHandler>: Copy {
     /// Register with the SSS. If the registration is successful, it should return a filled [Option](core::option::Option)
     /// containing the associated [crypto handler](crate::crypto::Handler). If it is not
     /// successful, the return value should be [None](core::option::Option::None).

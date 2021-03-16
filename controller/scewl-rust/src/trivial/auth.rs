@@ -2,12 +2,12 @@
 //! controller, which emulates the original behaviour of `sss_register` and `sss_deregister` from
 //! the [original C implementation](https://github.com/mitre-cyber-academy/2021-ectf-insecure-example/blob/master/controller/controller.c)
 
-use core::iter::Iterator;
 use core::option::Option;
 use core::result::Result::{Err, Ok};
 
 use crate::auth::Handler;
 use crate::controller::{Controller, Id, Message, SSSMessage, SSSOp};
+use crate::cursor::{ReadCursor, WriteCursor};
 use crate::interface::INTF::{CPU, SSS};
 use crate::trivial::NopCryptoHandler;
 
@@ -24,9 +24,8 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
             dev_id: controller.id(),
             op: SSSOp::Register,
         };
-        for (b1, b2) in controller.data().iter_mut().zip(&message.to_bytes()) {
-            *b1 = *b2;
-        }
+        let cdata = WriteCursor::new(controller.data());
+        let len = ReadCursor::new(&message.to_bytes()).copy_to(cdata);
 
         if controller
             .send_msg(
@@ -34,7 +33,7 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
                 &Message {
                     src_id: controller.id(),
                     tgt_id: Id::SSS,
-                    len: 4,
+                    len,
                 },
             )
             .is_err()
@@ -59,9 +58,8 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
             dev_id: controller.id(),
             op: SSSOp::Deregister,
         };
-        for (b1, b2) in controller.data().iter_mut().zip(&message.to_bytes()) {
-            *b1 = *b2;
-        }
+        let cdata = WriteCursor::new(controller.data());
+        let len = ReadCursor::new(&message.to_bytes()).copy_to(cdata);
 
         if controller
             .send_msg(
@@ -69,7 +67,7 @@ impl Handler<NopCryptoHandler> for DefaultHandler {
                 &Message {
                     src_id: controller.id(),
                     tgt_id: Id::SSS,
-                    len: 4,
+                    len,
                 },
             )
             .is_err()

@@ -20,6 +20,7 @@ panic-semihosting = { version = "0.5.6", optional = true }
 rand = { version = "0.8.3", default-features = false }
 rand_hc = "0.3.0"
 volatile-register = "0.2.0"
+byteorder = { version = "1.4.3", default-features = false }
 
 [[bin]]
 name = "controller"
@@ -34,3 +35,4 @@ lto = true
 [features]
 semihosted = ["cortex-m-semihosting", "panic-semihosting"]
 default = ["panic-halt"]
+

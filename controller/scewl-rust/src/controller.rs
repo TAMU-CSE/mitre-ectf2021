@@ -27,6 +27,7 @@ use core::mem::{size_of, size_of_val};
 
 use crate::auth::Handler as AuthHandler;
 use crate::crypto::Handler as CryptoHandler;
+use crate::cursor::{ReadCursor, WriteCursor};
 use crate::interface::INTF::{CPU, RAD, SSS};
 use crate::interface::{Interface, INTF};
 use core::result::Result as CoreResult;
@@ -110,25 +111,29 @@ impl MessageHeader {
     /// possesses the header magic required.
     fn to_bytes(&self) -> [u8; 8] {
         let mut bytes = [0_u8; 8];
-        bytes[0] = b'S';
-        bytes[1] = b'C';
-        bytes[2..(2 + size_of::<u16>())].clone_from_slice(&u16::from(self.tgt_id).to_ne_bytes());
-        bytes[(2 + size_of::<u16>())..(2 + size_of::<u16>() * 2)]
-            .clone_from_slice(&u16::from(self.src_id).to_ne_bytes());
-        bytes[(2 + size_of::<u16>() * 2)..(2 + size_of::<u16>() * 3)]
-            .clone_from_slice(&self.len.to_ne_bytes());
+        WriteCursor::new(&mut bytes)
+            .write_u8(b'S')
+            .write_u8(b'C')
+            .write_u16(self.tgt_id.into())
+            .write_u16(self.src_id.into())
+            .write_u16(self.len);
         bytes
     }
 
-    /// Instantiates a `MessageHeader` based on the contents of a buffer according to the specification.
+    /// Instantiates a `MessageHeader` based on the contents of a buffer according to the
+    /// specification.
     ///
-    /// While this type does not have the magicS and magicC fields, they are expected by this method.
+    /// While this type does not have the magicS and magicC fields, they are assumed to be present
+    /// by this method.
     fn from_bytes(buf: [u8; 8]) -> Self {
-        // ignore the first two bytes     
+        let mut cur = ReadCursor::new(&buf);
+        // ignore the first two bytes
+        cur.advance(2);
+
         Self {
-            tgt_id: u16::from_ne_bytes([buf[2], buf[3]]).into(),
-            src_id: u16::from_ne_bytes([buf[4], buf[5]]).into(),
-            len: u16::from_ne_bytes([buf[6], buf[7]]).into(),
+            tgt_id: cur.read_u16().into(),
+            src_id: cur.read_u16().into(),
+            len: cur.read_u16(),
         }
     }
 }
@@ -151,19 +156,21 @@ impl SSSMessage {
     /// Serialise the SSS message to a byte array
     pub fn to_bytes(self) -> [u8; 4] {
         let mut bytes = [0_u8; 4];
-        bytes[..size_of::<u16>()].clone_from_slice(&u16::from(self.dev_id).to_ne_bytes());
-        bytes[size_of::<u16>()..SSSMessage::size()]
-            .clone_from_slice(&i16::from(self.op).to_ne_bytes());
+
+        WriteCursor::new(&mut bytes)
+            .write_u16(self.dev_id.into())
+            .write_i16(self.op.into());
+
         bytes
     }
 
     /// Deserialise the SSS message from a byte array
     pub fn from_bytes(data: &[u8]) -> SSSMessage {
-        let dev_id = [data[0], data[1]];
-        let op = [data[2], data[3]];
+        let mut cur = ReadCursor::new(&data);
+
         SSSMessage {
-            dev_id: u16::from_ne_bytes(dev_id).into(),
-            op: i16::from_ne_bytes(op).into(),
+            dev_id: cur.read_u16().into(),
+            op: cur.read_i16().into(),
         }
     }
 
@@ -243,8 +250,8 @@ pub struct Message {
 /// and [crypto handlers](crate::crypto::Handler).
 pub struct Controller<'a, A, C>
 where
-    A: AuthHandler<C> + Sized,
-    C: CryptoHandler + Sized,
+    A: AuthHandler<C>,
+    C: CryptoHandler,
 {
     /// The ID of this controller; in the original C implementation, this was a macro called
     /// SCEWL_ID
@@ -267,7 +274,7 @@ where
     crypto: Option<C>,
 }
 
-impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, C> {
+impl<'a, A: AuthHandler<C>, C: CryptoHandler> Controller<'a, A, C> {
     /// Instantiates a new instance of the controller
     ///
     /// As explained in the [module documentation](crate::controller), controllers require an
@@ -286,7 +293,7 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
     }
 }
 
-impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, C> {
+impl<'a, A: AuthHandler<C>, C: CryptoHandler> Controller<'a, A, C> {
     /// Acquires a copy of the interface wrapper for a specific interface. This method is used
     /// internally as a shorthand for acquiring interfaces to read/write on.
     fn get_intf(&self, intf: &INTF) -> Interface {
@@ -351,7 +358,8 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         }
 
         let mut buf: [u8; 8] = [0_u8; 8];
-        intf.read(&mut buf[2..], 6, blocking).map_err(|_| Error::NoMessage)?;
+        intf.read(&mut buf[2..], 6, blocking)
+            .map_err(|_| Error::NoMessage)?;
         let hdr = MessageHeader::from_bytes(buf);
 
         let len = min(hdr.len, len) as usize;

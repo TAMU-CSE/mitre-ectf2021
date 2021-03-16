@@ -38,6 +38,7 @@ impl SecureHandler {
 
 impl Handler for SecureHandler {
     fn encrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> usize {
+        // TODO: port this over to use a cursor
         let mut iv = [0_u8; 16];
         self.random.fill_bytes(&mut iv);
         let newlen = SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER + message.len;
@@ -48,11 +49,12 @@ impl Handler for SecureHandler {
             data[to] = data[from];
         }
         data[..size_of::<[u8; 16]>()].clone_from_slice(&iv[..size_of::<[u8; 16]>()]);
-        for (from, to) in message.len.to_ne_bytes().iter().zip(
-            data[SecureHandler::DEC_HEADER
-                ..(SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER)]
-                .iter_mut(),
-        ) {
+        for (from, to) in message
+            .len
+            .to_ne_bytes()
+            .iter()
+            .zip(data[SecureHandler::DEC_HEADER..][..SecureHandler::ENC_HEADER].iter_mut())
+        {
             *to = *from;
         }
         let cbc = Aes128Cbc::new_var(&self.aes_key, &iv).unwrap();
@@ -67,21 +69,17 @@ impl Handler for SecureHandler {
     }
 
     fn decrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> Option<usize> {
+        // TODO: port this over to use a cursor
         let mut iv = [0_u8; SecureHandler::DEC_HEADER];
         iv.copy_from_slice(&data[..SecureHandler::DEC_HEADER]);
         let cbc = Aes128Cbc::new_var(&self.aes_key, &iv).unwrap();
-        if cbc
-            .decrypt(&mut data[SecureHandler::DEC_HEADER..message.len])
-            .is_err()
-        {
-            return None;
-        }
+        cbc.decrypt(&mut data[SecureHandler::DEC_HEADER..message.len])
+            .ok()?;
         let mut len = [0_u8; size_of::<usize>()];
-        for (to, from) in len.iter_mut().zip(
-            data[SecureHandler::DEC_HEADER
-                ..(SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER)]
-                .iter_mut(),
-        ) {
+        for (to, from) in len
+            .iter_mut()
+            .zip(data[SecureHandler::DEC_HEADER..][..SecureHandler::ENC_HEADER].iter_mut())
+        {
             *to = *from;
         }
         let len = usize::from_ne_bytes(len);

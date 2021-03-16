@@ -5,6 +5,7 @@
 
 use crate::auth::Handler;
 use crate::controller::{Controller, Id, Message, SSSMessage, SSSOp};
+use crate::cursor::{ReadCursor, WriteCursor};
 use crate::interface::INTF;
 use crate::secure::crypto::SecureHandler as CryptoHandler;
 use core::mem::size_of;
@@ -25,12 +26,12 @@ struct SecureSSSMessage {
 impl SecureSSSMessage {
     fn to_bytes(&self) -> [u8; 12] {
         let mut buf = [0_u8; 12];
-        buf[0..size_of::<u16>()].clone_from_slice(&u16::from(self.dev_id).to_ne_bytes());
-        buf[size_of::<u16>()..(size_of::<u16>() + size_of::<i16>())]
-            .clone_from_slice(&i16::from(self.op).to_ne_bytes());
-        buf[(size_of::<u16>() + size_of::<i16>())
-            ..(size_of::<u16>() + size_of::<i16>() + size_of::<u64>())]
-            .clone_from_slice(&self.private_id.to_ne_bytes());
+
+        WriteCursor::new(&mut buf)
+            .write_u16(self.dev_id.into())
+            .write_i16(self.op.into())
+            .write_u64(self.private_id);
+
         buf
     }
 }
@@ -46,53 +47,27 @@ struct SecureSSSResponse {
 
 impl SecureSSSResponse {
     fn from_bytes(buf: &[u8]) -> Option<SecureSSSResponse> {
-        if buf.len() >= size_of::<u16>() + size_of::<i16>() {
-            let mut min;
-            let mut max = 0;
-
+        (buf.len() >= size_of::<u16>() + size_of::<i16>()).then(|| {
+            let mut cur = ReadCursor::new(&buf);
             let mut resp = SecureSSSResponse {
-                dev_id: Id::Other(0),
-                op: SSSOp::Unknown,
+                dev_id: cur.read_u16().into(),
+                op: cur.read_i16().into(),
                 seed: None,
                 aes_key: None,
                 hmac_key: None,
             };
-            min = max;
-            let mut dev_id = [0_u8; size_of::<u16>()];
-            max += size_of_val(&dev_id);
-            dev_id.clone_from_slice(&buf[min..max]);
-            resp.dev_id = u16::from_ne_bytes(dev_id).into();
 
-            min = max;
-            let mut op = [0_u8; size_of::<i16>()];
-            max += size_of_val(&op);
-            op.clone_from_slice(&buf[min..max]);
-            resp.op = i16::from_ne_bytes(op).into();
-
+            // TODO: since we either have all 3 crypto values or we don't,
+            // it's probably better to use an Option<(T, T, T)> or another
+            // wrapper struct instead of separate Options
             if buf.len() == SecureSSSResponse::size() {
-                min = max;
-                let mut seed = [0_u8; size_of::<[u8; 32]>()];
-                max += size_of_val(&seed);
-                seed.clone_from_slice(&buf[min..max]);
-                resp.seed = Some(seed);
-
-                min = max;
-                let mut aes_key = [0_u8; size_of::<[u8; 16]>()];
-                max += size_of_val(&aes_key);
-                aes_key.clone_from_slice(&buf[min..max]);
-                resp.aes_key = Some(aes_key);
-
-                min = max;
-                let mut hmac_key = [0_u8; size_of::<[u8; 16]>()];
-                max += size_of_val(&hmac_key);
-                hmac_key.clone_from_slice(&buf[min..max]);
-                resp.hmac_key = Some(hmac_key);
+                resp.seed = Some(cur.read_32_u8());
+                resp.aes_key = Some(cur.read_16_u8());
+                resp.hmac_key = Some(cur.read_16_u8());
             }
 
-            Some(resp)
-        } else {
-            None
-        }
+            resp
+        })
     }
 
     const fn size() -> usize {
@@ -118,7 +93,7 @@ impl Handler<CryptoHandler> for SecureHandler {
 
         controller.data()[0..size_of_val(&mesbuf)].clone_from_slice(&mesbuf);
 
-        if controller
+        controller
             .send_msg(
                 &INTF::SSS,
                 &Message {
@@ -127,10 +102,7 @@ impl Handler<CryptoHandler> for SecureHandler {
                     len: size_of_val(&mesbuf),
                 },
             )
-            .is_err()
-        {
-            return None;
-        }
+            .ok()?;
 
         #[allow(clippy::cast_possible_truncation)]
         // truncation permissible for this response size
@@ -157,7 +129,7 @@ impl Handler<CryptoHandler> for SecureHandler {
                     len: SSSMessage::size(),
                 },
             )
-            .err()?;
+            .ok()?;
 
         Some(CryptoHandler::new(
             resp.seed?,
