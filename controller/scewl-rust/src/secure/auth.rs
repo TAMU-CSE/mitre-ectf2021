@@ -1,7 +1,12 @@
+//! TODO: document full format of messages, protection mechanisms, etc. for this module and associated implementations
+
+#![allow(missing_docs)]
+#![allow(clippy::missing_docs_in_private_items)]
+
 use crate::auth::Handler;
 use crate::controller::{Controller, Id, Message, SSSMessage, SSSOp};
 use crate::interface::INTF;
-use crate::secure::crypto::AESCryptoHandler;
+use crate::secure::crypto::SecureHandler as CryptoHandler;
 use core::mem::size_of;
 use core::mem::size_of_val;
 
@@ -99,11 +104,11 @@ impl SecureSSSResponse {
     }
 }
 
-impl Handler<AESCryptoHandler> for SecureHandler {
+impl Handler<CryptoHandler> for SecureHandler {
     fn sss_register(
         self,
-        controller: &mut Controller<Self, AESCryptoHandler>,
-    ) -> Option<AESCryptoHandler> {
+        controller: &mut Controller<Self, CryptoHandler>,
+    ) -> Option<CryptoHandler> {
         let message = SecureSSSMessage {
             dev_id: controller.id(),
             op: SSSOp::Register,
@@ -127,6 +132,8 @@ impl Handler<AESCryptoHandler> for SecureHandler {
             return None;
         }
 
+        #[allow(clippy::cast_possible_truncation)]
+        // truncation permissible for this response size
         let resp = if let Ok(resp) =
             controller.read_msg(&INTF::SSS, SecureSSSResponse::size() as u16, true)
         {
@@ -162,7 +169,7 @@ impl Handler<AESCryptoHandler> for SecureHandler {
         }
 
         if resp.seed.is_some() {
-            Some(AESCryptoHandler::new(
+            Some(CryptoHandler::new(
                 resp.seed.unwrap(),
                 resp.aes_key.unwrap(),
                 resp.hmac_key.unwrap(),
@@ -172,7 +179,7 @@ impl Handler<AESCryptoHandler> for SecureHandler {
         }
     }
 
-    fn sss_deregister(self, controller: &mut Controller<Self, AESCryptoHandler>) -> bool {
+    fn sss_deregister(self, controller: &mut Controller<Self, CryptoHandler>) -> bool {
         unimplemented!()
     }
 }

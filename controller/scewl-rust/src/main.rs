@@ -50,15 +50,15 @@
 //!
 //! To account for this abstraction, we separate the controller into the following modules:
 //!
-//!  - The controller itself, the driver for communications, which employs an encryption handler and
+//!  - The controller itself, the driver for communications, which employs an crypto handler and
 //!    an authentication handler
-//!  - The encryption handler, which decrypts/encrypts information to/from the CPU to other SEDs
-//!  - The authentication handler, which interacts with the SSS and generates the encryption handler
+//!  - The crypto handler, which decrypts/encrypts information to/from the CPU to other SEDs
+//!  - The authentication handler, which interacts with the SSS and generates the crypto handler
 //!    specified by that SSS
 //!
 //! As we wish to test the basic operation of the communications channel as well as the additional
 //! security features on top, it behooves us to employ [type generics](https://doc.rust-lang.org/book/ch10-01-syntax.html)
-//! to allow for plug-and-play replacements for both the encryption handler and authentication
+//! to allow for plug-and-play replacements for both the crypto handler and authentication
 //! handler. To do so, we define traits for [encryption](crypto::Handler) and
 //! [authentication](auth::Handler). The [controller implementation](controller::Controller)
 //! is generified to support arbitrary implementations of these handlers, restricting their use to
@@ -127,6 +127,8 @@ const SCEWL_ID: &str = env!("SCEWL_ID");
 #[cfg(doc)]
 const SCEWL_ID: &str = "0";
 
+/// Entrypoint for the controller embedded software, which instantiates the controller with the
+/// selected authentication and crypto handlers, then enters the controller run loop
 #[entry]
 fn main() -> ! {
     let mut data = [0_u8; SCEWL_MAX_DATA_SZ];

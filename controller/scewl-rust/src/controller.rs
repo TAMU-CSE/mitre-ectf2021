@@ -4,7 +4,7 @@
 //! changes necessary to secure communications between controller and other SEDs while allowing
 //! debugging of the underlying (and very simple) communications channel implemented in [the interface module](crate::interface).
 //! To support this, the [controller struct](Controller) utilises a type generic to support
-//! arbitrary [authentication handlers](crate::auth::Handler) and [encryption handlers](crate::crypto::Handler).
+//! arbitrary [authentication handlers](crate::auth::Handler) and [crypto handlers](crate::crypto::Handler).
 //!
 //! To allow for custom authentication handlers, the [constructor for Controller](Controller::new)
 //! requires an [`AuthHandler`](crate::auth::Handler). The controller calls on this `AuthHandler` during
@@ -12,10 +12,11 @@
 //! for details.
 //!
 //! As the result of a successful registration, the `AuthHandler` instantiates a [`CryptoHandler`](crate::crypto::Handler).
-//! This `CryptoHandler` will be used during [`handle_scewl_recv`](Controller::handle_scewl_recv) and
-//! [`handle_scewl_send`](Controller::handle_scewl_send) to encrypt and decrypt messages to and from
-//! the radio, not including FAA messages. This enforces that FAA and non-radio messages are not
-//! encrypted, regardless of the `CryptoHandler` used.
+//! This `CryptoHandler` will be used during [`handle_scewl_recv`](Controller::handle_scewl_recv),
+//! [`handle_scewl_send`](Controller::handle_scewl_send), [`handle_brdcst_recv`](Controller::handle_brdcst_recv),
+//! and [`handle_brdcst_send`](Controller::handle_brdcst_send) to encrypt and decrypt messages to
+//! and from the radio, not including FAA messages. This enforces that FAA and non-radio messages
+//! are not encrypted, regardless of the `CryptoHandler` used.
 //!
 //! When the CPU requests to deregister, the `CryptoHandler` is dropped and both in- and out-bound
 //! SCEWL messages are refused (as they can no longer be sent or verified). We use this mechanism
@@ -126,6 +127,7 @@ impl MessageHeader {
 /// This type (and its members) are public as messages received from the CPU are in this format. The
 /// `AuthHandler` is permitted (and expected) to implement a different message format to communicate
 /// with the SSS and update the SSS accordingly.
+#[derive(Copy, Clone)]
 pub struct SSSMessage {
     /// The ID of the device attempting to register
     pub dev_id: Id,
@@ -135,7 +137,7 @@ pub struct SSSMessage {
 
 impl SSSMessage {
     /// Serialise the SSS message to a byte array
-    pub fn to_bytes(&self) -> [u8; 4] {
+    pub fn to_bytes(self) -> [u8; 4] {
         let mut bytes = [0_u8; 4];
         bytes[..size_of::<u16>()].clone_from_slice(&u16::from(self.dev_id).to_ne_bytes());
         bytes[size_of::<u16>()..SSSMessage::size()]
@@ -155,6 +157,8 @@ impl SSSMessage {
         }
     }
 
+    /// Acquires the (constant) size of the `SSSMessage` type, for convenience when this type is
+    /// (de)serialised over a stream.
     pub const fn size() -> usize {
         size_of::<u16>() + size_of::<i16>()
     }
@@ -209,7 +213,7 @@ impl From<SSSOp> for i16 {
 
 /// Message wrapper, for implementations _not_ consistent with the original specification -- for
 /// messages which are in- or out-bound on the SSS or radio
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct Message {
     /// ID of the SED to receive this message
     pub tgt_id: Id,
@@ -220,21 +224,45 @@ pub struct Message {
     pub len: usize,
 }
 
+/// Main type for the controller, which is a near-direct port of the original C implementation
+///
+/// The implementation of this type differs in that it can use arbitrary implementations of the
+/// security-enhanceable parts of the SCEWL specification rather easily simply by using different
+/// type which implements the respective handler types. For further information on how to
+/// appropriately develop these handlers, see the documentation for [authentication handlers](crate::auth::Handler)
+/// and [crypto handlers](crate::crypto::Handler).
 pub struct Controller<'a, A, C>
 where
     A: AuthHandler<C> + Sized,
     C: CryptoHandler + Sized,
 {
+    /// The ID of this controller; in the original C implementation, this was a macro called
+    /// SCEWL_ID
     id: Id,
+    /// The interface to the CPU, which more idiomatically manages reading and writing to the serial
+    /// UART peripheral
     cpu: Interface,
+    /// The interface to the SSS
     sss: Interface,
+    /// Th interface to the radio
     rad: Interface,
+    /// The data buffer used by Controller to send _all_ messages
+    ///
+    /// TODO consider returning the buffer and copying instead?
     data: &'a mut [u8; SCEWL_MAX_DATA_SZ],
+    /// The authentication handler, which will be used to instantiate the crypto handler for the
+    /// controller post-authentication
     auth: A,
+    /// The crypto handler, which, when present, will encrypt and decrypt messages over the radio
     crypto: Option<C>,
 }
 
 impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, C> {
+    /// Instantiates a new instance of the controller
+    ///
+    /// As explained in the [module documentation](crate::controller), controllers require an
+    /// authentication handler to manage the registration and crypto handler availability
+    /// during runtime.
     pub fn new(id: Id, buf: &'a mut [u8; SCEWL_MAX_DATA_SZ], auth: A) -> Self {
         Controller {
             id,
@@ -249,6 +277,8 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
 }
 
 impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, C> {
+    /// Acquires a copy of the interface wrapper for a specific interface. This method is used
+    /// internally as a shorthand for acquiring interfaces to read/write on.
     fn get_intf(&self, intf: &INTF) -> Interface {
         match intf {
             CPU => &self.cpu,
@@ -258,18 +288,35 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         .clone()
     }
 
+    /// Gets the ID of this controller, which is necessary for some authentication and cryptographic
+    /// operations
     pub fn id(&self) -> Id {
         self.id
     }
 
+    /// Gets the current registration status of this controller
     pub fn registered(&self) -> bool {
         self.crypto.is_some()
     }
 
+    /// Gets a mutable reference to the internal data of this controller
+    ///
+    /// This method is intended to be used by handlers as a means of accessing the response data of
+    /// a particular [`read_msg`](Controller::read_msg) operation
     pub fn data(&mut self) -> &mut [u8] {
         self.data
     }
 
+    /// Reads a message of the given length from the interface specified, optionally blocking
+    ///
+    /// The content of the message will be written directly to the data buffer allocated for
+    /// sending and receiving messages, available to other types via [`data`](Controller::data).
+    ///
+    /// This method _does not_ perform any cryptographic operations. Instead, if a message is
+    /// expected to contain encrypted content (e.g. in the case that a message is received from
+    /// another SED via direct message or broadcast), it will be post-processed by the [run loop](Controller::run)
+    /// as handled by [`handle_scewl_recv`](Controller::handle_scewl_recv) and [`handle_brdcst_recv`](Controller::handle_brdcst_recv).
+    /// See the respective method for details on this post-processing operation.
     pub fn read_msg(&mut self, intf: &INTF, len: u16, blocking: bool) -> Result<Message> {
         let mut intf = self.get_intf(intf);
         let mut hdr = MessageHeader::default();
@@ -349,9 +396,17 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         }
     }
 
+    /// Sends the current content of the data buffer to the specified interface with the provided
+    /// message header
+    ///
+    /// Note that, in particular, the message header specifies the length of the message. It is not
+    /// necessary to write the message header to the data buffer in advance, as this method will
+    /// send the message header first before sending the content of the data buffer, limited to the
+    /// length specified in the provided message header.
     pub fn send_msg(&mut self, intf: &INTF, message: &Message) -> Result<()> {
         let mut intf = self.get_intf(intf);
 
+        #[allow(clippy::cast_possible_truncation)] // length is truncated appropriately
         let hdr = MessageHeader {
             tgt_id: message.tgt_id,
             src_id: message.src_id,
@@ -375,76 +430,117 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         Ok(())
     }
 
+    /// Method which is used internally to handle messages received on the radio interface from
+    /// other SEDs, disincluding broadcasts (see [`handle_brdcst_recv`](Controller::handle_brdcst_recv))
+    ///
+    /// This method will be invoked by the [run loop](Controller::run) in the case that a received
+    /// message is from another SED and not a broadcast. The crypto handler's [decryption operation](crate::crypto::Handler::decrypt)
+    /// will be invoked before this message is passed on to the CPU.
     fn handle_scewl_recv(&mut self, src_id: Id, len: usize) -> Result<()> {
         if self.crypto.is_none() {
             return Err(Error::Err);
         }
-        let actual = match self.crypto.as_mut().unwrap().decrypt(
-            &mut self.data,
-            Message {
-                tgt_id: self.id,
-                src_id,
-                len,
-            },
-        ) {
+        let mut message = Message {
+            tgt_id: self.id,
+            src_id,
+            len,
+        };
+        message.len = match self
+            .crypto
+            .as_mut()
+            .unwrap()
+            .decrypt(&mut self.data, message)
+        {
             None => return Err(Error::Err),
             Some(message) => message,
         };
 
-        self.send_msg(&CPU, &actual)
+        self.send_msg(&CPU, &message)
     }
 
+    /// Method which is used internally to handle messages received on the CPU interface to be sent
+    /// to other SEDs, disincluding broadcasts (see [`handle_brdcst_send`](Controller::handle_brdcst_send))
+    ///
+    /// This method will be invoked by the [run loop](Controller::run) in the case that a message to
+    /// be sent is a direct message to another SED. The crypto handler's [encryption operation](crate::crypto::Handler::encrypt)
+    /// will be invoked before this message is passed on to the radio.
     fn handle_scewl_send(&mut self, tgt_id: Id, len: usize) -> Result<()> {
         if self.crypto.is_none() {
             return Err(Error::Err);
         }
-        let actual = self.crypto.as_mut().unwrap().encrypt(
-            &mut self.data,
-            Message {
-                tgt_id,
-                src_id: self.id,
-                len,
-            },
-        );
+        let mut message = Message {
+            tgt_id,
+            src_id: self.id,
+            len,
+        };
+        message.len = self
+            .crypto
+            .as_mut()
+            .unwrap()
+            .encrypt(&mut self.data, message);
 
-        self.send_msg(&RAD, &actual)
+        self.send_msg(&RAD, &message)
     }
 
+    /// Method which is used internally to handle broadcasts received on the radio interface from
+    /// other SEDs (see [`handle_scewl_recv`](Controller::handle_scewl_recv) for information on how
+    /// direct messages are handled)
+    ///
+    /// This method will be invoked by the [run loop](Controller::run) in the case that a received
+    /// message is from another SED and is a broadcast. The crypto handler's [decryption operation](crate::crypto::Handler::decrypt)
+    /// will be invoked before this message is passed on to the CPU.
     fn handle_brdcst_recv(&mut self, src_id: Id, len: usize) -> Result<()> {
         if self.crypto.is_none() {
             return Err(Error::Err);
         }
-        let actual = match self.crypto.as_mut().unwrap().decrypt(
-            &mut self.data,
-            Message {
-                tgt_id: Id::Broadcast,
-                src_id,
-                len,
-            },
-        ) {
+        let mut message = Message {
+            tgt_id: Id::Broadcast,
+            src_id,
+            len,
+        };
+        message.len = match self
+            .crypto
+            .as_mut()
+            .unwrap()
+            .decrypt(&mut self.data, message)
+        {
             None => return Err(Error::Err),
             Some(len) => len,
         };
 
-        self.send_msg(&CPU, &actual)
+        self.send_msg(&CPU, &message)
     }
 
+    /// Method which is used internally to handle messages received on the CPU interface to be sent
+    /// to other SEDs as a broadcast (see [`handle_scewl_send`](Controller::handle_scewl_send) for
+    /// information on how direct messages are handled)
+    ///
+    /// This method will be invoked by the [run loop](Controller::run) in the case that a message to
+    /// be sent is a broadcast. The crypto handler's [encryption operation](crate::crypto::Handler::encrypt)
+    /// will be invoked before this message is passed on to the radio.
     fn handle_brdcst_send(&mut self, len: usize) -> Result<()> {
         if self.crypto.is_none() {
             return Err(Error::Err);
         }
-        let actual = self.crypto.as_mut().unwrap().encrypt(
-            &mut self.data,
-            Message {
-                tgt_id: Id::Broadcast,
-                src_id: self.id,
-                len,
-            },
-        );
+        let mut message = Message {
+            tgt_id: Id::Broadcast,
+            src_id: self.id,
+            len,
+        };
+        message.len = self
+            .crypto
+            .as_mut()
+            .unwrap()
+            .encrypt(&mut self.data, message);
 
-        self.send_msg(&RAD, &actual)
+        self.send_msg(&RAD, &message)
     }
 
+    /// Method which is used internally to handle messages received on the radio interface from the
+    /// FAA
+    ///
+    /// As per the specification, FAA messages will _not_ be encrypted by any mechanism. As such,
+    /// this method simply forwards the message received on the radio directly to the CPU.
     fn handle_faa_recv(&mut self, len: usize) -> Result<()> {
         self.send_msg(
             &CPU,
@@ -456,6 +552,10 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         )
     }
 
+    /// Method which is used internally to handle messages to be sent to the FAA from the CPU
+    ///
+    /// As per the specification, FAA messages will _not_ be encrypted by any mechanism. As such,
+    /// this method simply forwards the message to be sent to the radio directly from the CPU.
     fn handle_faa_send(&mut self, len: usize) -> Result<()> {
         self.send_msg(
             &RAD,
@@ -467,6 +567,18 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         )
     }
 
+    /// Method which is used internally to manage registration with the SSS.
+    ///
+    /// The CPU is expected to initiate all (de)registration requests and, as such, this method will
+    /// only be invoked by the [run loop](Controller::run) when the CPU requests to register or
+    /// deregister. The authentication handler is expected to handle _all_ additional communications
+    /// between the controller and the SSS, including any handshakes or exchanges of information.
+    ///
+    /// Should the CPU request to authenticate with the SSS, the authentication handler will be
+    /// requested to perform a registration. Should this registration be successful, the
+    /// authentication handler should instantiate a crypto handler appropriate for the SSS's
+    /// response. This crypto handler will then be used until deregistration (or another successful
+    /// registration) occurs by methods which send/recieve non-FAA messages over the radio.
     fn handle_registration(&mut self) -> bool {
         let message = SSSMessage::from_bytes(self.data);
         match message.op {
@@ -482,8 +594,14 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
         }
     }
 
+    /// The run loop for the controller, which will never terminate
+    ///
+    /// This method is a near-exact port of the C implementation's main method, with changes for
+    /// expressions that are more idiomatic for Rust.
     pub fn run(&mut self) -> ! {
         loop {
+            #[allow(clippy::cast_possible_truncation)]
+            // SCEWL_MAX_DATA_SZ is truncated appropriately
             if let Ok(msg) = self.read_msg(&CPU, SCEWL_MAX_DATA_SZ as u16, true) {
                 if msg.tgt_id == Id::SSS {
                     let _ignored = self.handle_registration();
@@ -492,12 +610,14 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
 
             while self.registered() {
                 if self.cpu.avail() {
+                    #[allow(clippy::cast_possible_truncation)]
+                    // SCEWL_MAX_DATA_SZ is truncated appropriately
                     if let Ok(msg) = self.read_msg(&CPU, SCEWL_MAX_DATA_SZ as u16, true) {
                         let _ignored = match msg.tgt_id {
                             Id::Broadcast => self.handle_brdcst_send(msg.len).is_ok(),
                             Id::SSS => self.handle_registration(),
                             Id::FAA => self.handle_faa_send(msg.len).is_ok(),
-                            id => self.handle_scewl_send(id, msg.len).is_ok(),
+                            id @ Id::Other(_) => self.handle_scewl_send(id, msg.len).is_ok(),
                         };
 
                         continue;
@@ -505,6 +625,8 @@ impl<'a, A: AuthHandler<C> + Sized, C: CryptoHandler + Sized> Controller<'a, A, 
                 }
 
                 if self.rad.avail() {
+                    #[allow(clippy::cast_possible_truncation)]
+                    // SCEWL_MAX_DATA_SZ is truncated appropriately
                     if let Ok(msg) = self.read_msg(&RAD, SCEWL_MAX_DATA_SZ as u16, true) {
                         let _ignored = match (msg.src_id, msg.tgt_id) {
                             (src, Id::Broadcast) => self.handle_brdcst_recv(src, msg.len).is_ok(),

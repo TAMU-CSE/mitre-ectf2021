@@ -1,3 +1,8 @@
+//! TODO: document full format of messages, protection mechanisms, etc. for this module and associated implementations
+
+#![allow(missing_docs)]
+#![allow(clippy::missing_docs_in_private_items)]
+
 use core::mem::size_of;
 
 use aes::Aes128;
@@ -11,13 +16,13 @@ use crate::crypto::Handler;
 
 type Aes128Cbc = Cbc<Aes128, Pkcs7>;
 
-pub struct AESCryptoHandler {
+pub struct SecureHandler {
     random: Hc128Rng,
     aes_key: [u8; 16],
     hmac_key: [u8; 16],
 }
 
-impl AESCryptoHandler {
+impl SecureHandler {
     const DEC_HEADER: usize = size_of::<[u8; 16]>();
     const ENC_HEADER: usize = size_of::<usize>();
 
@@ -31,21 +36,21 @@ impl AESCryptoHandler {
     }
 }
 
-impl Handler for AESCryptoHandler {
-    fn encrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> Message {
+impl Handler for SecureHandler {
+    fn encrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> usize {
         let mut iv = [0_u8; 16];
         self.random.fill_bytes(&mut iv);
-        let newlen = AESCryptoHandler::DEC_HEADER + AESCryptoHandler::ENC_HEADER + message.len;
+        let newlen = SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER + message.len;
         for (from, to) in (0..message.len)
-            .zip((AESCryptoHandler::DEC_HEADER + AESCryptoHandler::ENC_HEADER)..newlen)
+            .zip((SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER)..newlen)
             .rev()
         {
             data[to] = data[from];
         }
         data[..size_of::<[u8; 16]>()].clone_from_slice(&iv[..size_of::<[u8; 16]>()]);
         for (from, to) in message.len.to_ne_bytes().iter().zip(
-            data[AESCryptoHandler::DEC_HEADER
-                ..(AESCryptoHandler::DEC_HEADER + AESCryptoHandler::ENC_HEADER)]
+            data[SecureHandler::DEC_HEADER
+                ..(SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER)]
                 .iter_mut(),
         ) {
             *to = *from;
@@ -53,32 +58,28 @@ impl Handler for AESCryptoHandler {
         let cbc = Aes128Cbc::new_var(&self.aes_key, &iv).unwrap();
         let actual = block_roundup(newlen);
         cbc.encrypt(
-            &mut data[AESCryptoHandler::DEC_HEADER..actual],
-            AESCryptoHandler::ENC_HEADER + message.len,
+            &mut data[SecureHandler::DEC_HEADER..actual],
+            SecureHandler::ENC_HEADER + message.len,
         )
         .unwrap();
 
-        Message {
-            tgt_id: message.tgt_id,
-            src_id: message.src_id,
-            len: actual,
-        }
+        actual
     }
 
-    fn decrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> Option<Message> {
-        let mut iv = [0_u8; AESCryptoHandler::DEC_HEADER];
-        iv.copy_from_slice(&data[..AESCryptoHandler::DEC_HEADER]);
+    fn decrypt(&mut self, data: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> Option<usize> {
+        let mut iv = [0_u8; SecureHandler::DEC_HEADER];
+        iv.copy_from_slice(&data[..SecureHandler::DEC_HEADER]);
         let cbc = Aes128Cbc::new_var(&self.aes_key, &iv).unwrap();
         if cbc
-            .decrypt(&mut data[AESCryptoHandler::DEC_HEADER..message.len])
+            .decrypt(&mut data[SecureHandler::DEC_HEADER..message.len])
             .is_err()
         {
             return None;
         }
         let mut len = [0_u8; size_of::<usize>()];
         for (to, from) in len.iter_mut().zip(
-            data[AESCryptoHandler::DEC_HEADER
-                ..(AESCryptoHandler::DEC_HEADER + AESCryptoHandler::ENC_HEADER)]
+            data[SecureHandler::DEC_HEADER
+                ..(SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER)]
                 .iter_mut(),
         ) {
             *to = *from;
@@ -86,18 +87,15 @@ impl Handler for AESCryptoHandler {
         let len = usize::from_ne_bytes(len);
         for (to, from) in (0..len)
             .zip(
-                (AESCryptoHandler::DEC_HEADER + AESCryptoHandler::ENC_HEADER)
-                    ..(len + (AESCryptoHandler::DEC_HEADER + AESCryptoHandler::ENC_HEADER)),
+                (SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER)
+                    ..(len + (SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER)),
             )
             .rev()
         {
             data[to] = data[from];
         }
-        Some(Message {
-            tgt_id: message.tgt_id,
-            src_id: message.src_id,
-            len,
-        })
+
+        Some(len)
     }
 }
 

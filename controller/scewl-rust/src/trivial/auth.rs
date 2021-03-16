@@ -1,3 +1,7 @@
+//! The authentication module for the trivial implementation of the security features for the
+//! controller, which emulates the original behaviour of `sss_register` and `sss_deregister` from
+//! the [original C implementation](https://github.com/mitre-cyber-academy/2021-ectf-insecure-example/blob/master/controller/controller.c)
+
 use core::iter::Iterator;
 use core::option::Option;
 use core::result::Result::{Err, Ok};
@@ -7,6 +11,7 @@ use crate::controller::{Controller, Id, Message, SSSMessage, SSSOp};
 use crate::interface::INTF::{CPU, SSS};
 use crate::trivial::NopCryptoHandler;
 
+/// A trivial authentication handler which simply passes the CPU-formatted SSS message to the SSS
 #[derive(Copy, Clone)]
 pub struct DefaultHandler;
 
