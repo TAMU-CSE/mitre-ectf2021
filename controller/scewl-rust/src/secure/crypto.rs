@@ -13,6 +13,7 @@ use rand_hc::Hc128Rng;
 
 use crate::controller::{Message, SCEWL_MAX_DATA_SZ};
 use crate::crypto::Handler;
+use crate::cursor::{ReadCursor, WriteCursor};
 
 type Aes128Cbc = Cbc<Aes128, Pkcs7>;
 
@@ -41,22 +42,16 @@ impl Handler for SecureHandler {
         // TODO: port this over to use a cursor
         let mut iv = [0_u8; 16];
         self.random.fill_bytes(&mut iv);
+
+        // memmove must occur first, otherwise we'd be overwriting data
         let newlen = SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER + message.len;
-        for (from, to) in (0..message.len)
-            .zip((SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER)..newlen)
-            .rev()
-        {
-            data[to] = data[from];
-        }
-        data[..size_of::<[u8; 16]>()].clone_from_slice(&iv[..size_of::<[u8; 16]>()]);
-        for (from, to) in message
-            .len
-            .to_ne_bytes()
-            .iter()
-            .zip(data[SecureHandler::DEC_HEADER..][..SecureHandler::ENC_HEADER].iter_mut())
-        {
-            *to = *from;
-        }
+        data.copy_within(0..message.len, SecureHandler::DEC_HEADER + SecureHandler::ENC_HEADER);
+
+        // unwraps here are ok because the data is known to be larger than the source buffer
+        WriteCursor::new(data)
+            .write(ReadCursor::new(&iv)).unwrap()
+            .write_usize(message.len);
+
         let cbc = Aes128Cbc::new_var(&self.aes_key, &iv).unwrap();
         let actual = block_roundup(newlen);
         cbc.encrypt(
