@@ -53,8 +53,8 @@ class SSS:
     def handle_transaction(self, csock: socket.SocketType):
         logging.debug('handling transaction')
         data = b''
-        while len(data) < 12:
-            recvd = csock.recv(12 - len(data))
+        while len(data) < 76:
+            recvd = csock.recv(76 - len(data))
             data += recvd
 
             # check for closed connection
@@ -65,12 +65,13 @@ class SSS:
 
         # read in corresponding scewl secret
         
-        scewl_secret = dev_id + "_secret"
-        if os.path.exists(scewl_secret):
-            with open(scewl_secret, "rb") as f:
-                checked_secret = f.read(64)
+        secret_path = f'/secrets/{dev_id}_secret'
+        if os.path.exists(secret_path):
+            with open(secret_path, "rb") as secret_file:
+                checked_secret = secret_file.read(64)
                 # check scewl_secret mismatch
                 if checked_secret != scewl_secret:
+                    logging.info(f'{dev_id}:expected: {checked_secret}, found: {scewl_secret}')
                     resp_op = ALREADY
                     logging.info(f'{dev_id}:key mismatch')
                     body = struct.pack('<Hh', dev_id, resp_op)
@@ -81,13 +82,13 @@ class SSS:
                     body = struct.pack('<Hh', dev_id, resp_op)
                 # record registration transaction and read in keys
                 # aes key is 16 bytes, hmac 64, seed 32
-                elif(op == REG):
+                elif op == REG:
                     self.devs[dev_id] = Device(dev_id, REG, csock)
                     resp_op = REG
-                    with open("aes_key", "rb") as f:
-                        aes_key = f.read(16)
-                    with open("hmac_key", "rb") as f:
-                        hmac_key = f.read(64)
+                    with open("/secrets/aes_key", "rb") as aes_file:
+                        aes_key = aes_file.read(16)
+                    with open("/secrets/hmac_key", "rb") as hmac_file:
+                        hmac_key = hmac_file.read(64)
                     logging.info(f'{dev_id}:Registered')
                     seed = secrets.token_bytes(32)
                     body = struct.pack('<Hh16s32s64s', dev_id, resp_op, aes_key, seed, hmac_key)

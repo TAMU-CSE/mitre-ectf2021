@@ -14,13 +14,15 @@
 //! helpfully defined for us by the [lm3s6965 crate](https://github.com/japaric/lm3s6965/blob/master/src/lib.rs)
 //! (thanks, [Jorge Aparicio](https://github.com/japaric)!).
 
-use crate::interface::Error::NoData;
-use crate::interface::RWStatusMask::{RXFE, TXFF};
 use core::fmt::Formatter;
 use core::fmt::{Debug, Result as FmtResult};
 use core::result::Result as CoreResult;
+
 use cortex_m::asm;
 use volatile_register::{RO, RW, WO};
+
+use crate::interface::Error::{NoData, SomeData};
+use crate::interface::RWStatusMask::{RXFE, TXFF};
 
 /// The UART struct as specified by the CMSIS specification (and, more specifically, [line 620 of `lm3s_cmsis.h`](https://github.com/mitre-cyber-academy/2021-ectf-insecure-example/blob/master/controller/lm3s/lm3s_cmsis.h#L620))
 ///
@@ -95,6 +97,8 @@ pub enum Error {
     Unknown,
     /// No data was received during the read operation
     NoData,
+    /// Only some data was received during the read operation
+    SomeData(usize),
 }
 
 /// Result type for interface operations
@@ -151,25 +155,16 @@ impl Interface {
         }
     }
 
-    /// Reads a buffer from the UART data register, optionally blocking; returns the number of bytes successfully read
+    /// Reads a buffer from the UART data register; returns the number of bytes successfully read
     ///
     /// Note that, unlike the original implementation, this does not unnecessarily perform a nop
     /// loop while blocking.
-    pub fn read(&mut self, buf: &mut [u8], blocking: bool) -> usize {
+    pub fn read(&mut self, buf: &mut [u8]) -> Result<()> {
         for (i, b) in buf.iter_mut().enumerate() {
-            match self.readb(blocking) {
-                Ok(res) => *b = res,
-                Err(_) => return i,
-            }
-
-            if !blocking {
-                for _ in 0..100_000 {
-                    asm::nop()
-                }
-            }
+            *b = self.readb(true).map_err(|_| SomeData(i))?;
         }
 
-        buf.len()
+        Ok(())
     }
 
     /// Discards the given number of bytes, without blocking
@@ -186,10 +181,11 @@ impl Interface {
         }
     }
 
-    /// Discards bytes that match the supplied predicate, optionally blocking; on success, returns the first byte that doesn't match the predicate
-    pub fn discard_while(&mut self, predicate: impl Fn(u8) -> bool, blocking: bool) -> Result<u8> {
+    /// Discards bytes that match the supplied predicate; on success, returns the first byte that
+    /// does not match the predicate
+    pub fn discard_while(&mut self, predicate: impl Fn(u8) -> bool) -> Result<u8> {
         loop {
-            let b = self.readb(blocking)?;
+            let b = self.readb(true)?;
 
             if !predicate(b) {
                 return Ok(b);
@@ -207,12 +203,10 @@ impl Interface {
     }
 
     /// Write a buffer to the UART data register -- always blocking
-    pub fn write(&mut self, buf: &[u8]) -> usize {
+    pub fn write(&mut self, buf: &[u8]) {
         for b in buf {
             self.writeb(*b);
         }
-
-        buf.len()
     }
 
     /// Converts this interface into its named form instead of a wrapper, allowing references to

@@ -1,4 +1,4 @@
-//! The cryptography module for the security implementation of the security features for the
+//! The cryptography module for the secure implementation of the security features for the
 //! controller
 //!
 //! # Design
@@ -128,18 +128,17 @@ use core::mem::size_of;
 use aes::Aes128;
 use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Cbc};
+use heapless::consts::U256;
+use heapless::LinearMap;
+use hmac::{Hmac, Mac, NewMac};
 use rand::{RngCore, SeedableRng};
 use rand_hc::Hc128Rng;
+use sha2::{Digest, Sha256};
 
 use crate::controller::{Id, Message, SCEWL_MAX_DATA_SZ};
 use crate::crypto::Handler as CryptoHandler;
 use crate::cursor::{ReadCursor, WriteCursor};
 use crate::debug;
-use hmac::{Hmac, Mac, NewMac};
-use sha2::{Digest, Sha256};
-
-use heapless::consts::U256;
-use heapless::LinearMap;
 
 /// Shorthand for the AES mode used by the crypto handler
 type Aes128Cbc = Cbc<Aes128, Pkcs7>;

@@ -5,7 +5,7 @@
 use crate::auth::Handler as AuthHandler;
 use crate::controller::{Controller, Id, Message, SSSMessage, SSSOp};
 use crate::cursor::ReadCursor;
-use crate::interface::INTF::{CPU, SSS};
+use crate::interface::INTF;
 use crate::trivial::CryptoHandler;
 
 /// A trivial authentication handler which simply passes the CPU-formatted SSS message to the SSS
@@ -25,7 +25,7 @@ impl AuthHandler<CryptoHandler> for Handler {
 
         controller
             .send_msg(
-                SSS,
+                INTF::SSS,
                 &Message {
                     src_id: controller.id(),
                     tgt_id: Id::SSS,
@@ -34,9 +34,9 @@ impl AuthHandler<CryptoHandler> for Handler {
             )
             .ok()?;
 
-        let res = controller.read_msg(SSS, 4, true).ok()?;
+        let res = controller.read_msg(INTF::SSS, 4).ok()?;
 
-        controller.send_msg(CPU, &res).ok()?;
+        controller.send_msg(INTF::CPU, &res).ok()?;
 
         (SSSMessage::from_bytes(controller.data()).op == SSSOp::Register).then(|| CryptoHandler)
     }
@@ -50,7 +50,7 @@ impl AuthHandler<CryptoHandler> for Handler {
 
         if controller
             .send_msg(
-                SSS,
+                INTF::SSS,
                 &Message {
                     src_id: controller.id(),
                     tgt_id: Id::SSS,
@@ -62,12 +62,12 @@ impl AuthHandler<CryptoHandler> for Handler {
             return false;
         }
 
-        let res = match controller.read_msg(SSS, 4, true) {
+        let res = match controller.read_msg(INTF::SSS, 4) {
             Ok(msg) => msg,
             Err(_) => return false,
         };
 
-        if controller.send_msg(CPU, &res).is_err() {
+        if controller.send_msg(INTF::CPU, &res).is_err() {
             return false;
         }
 

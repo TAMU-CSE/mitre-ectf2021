@@ -104,7 +104,6 @@
 #![warn(clippy::pedantic)] // enforce pedantic checks -- false positive prone
 #![deny(clippy::missing_docs_in_private_items)] // enforce documentation
 
-use crate::controller::{Controller, SCEWL_MAX_DATA_SZ};
 use cortex_m_rt::entry;
 use cortex_m_rt::exception;
 use lm3s6965 as _;
@@ -112,6 +111,8 @@ use lm3s6965 as _;
 use panic_halt as _;
 #[cfg(feature = "semihosted")]
 use panic_semihosting as _;
+
+use crate::controller::{Controller, SCEWL_MAX_DATA_SZ};
 
 mod auth;
 mod controller;
@@ -137,7 +138,11 @@ include!(concat!(env!("OUT_DIR"), "/values.rs"));
 #[entry]
 fn main() -> ! {
     let mut data = [0_u8; SCEWL_MAX_DATA_SZ];
-    let mut client = Controller::new(SCEWL_ID.into(), &mut data, secure::TestAuthHandler);
+    let mut client = Controller::new(
+        SCEWL_ID.into(),
+        &mut data,
+        secure::AuthHandler::new(&SECRET),
+    );
 
     client.run()
 }
