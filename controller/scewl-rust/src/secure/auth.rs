@@ -95,9 +95,9 @@ impl SecureSSSResponse {
                 dev_id: cur.read_u16().into(),
                 op: cur.read_i16().into(),
                 secrets: (buf.len() == SecureSSSResponse::size()).then(|| SecureSSSSecrets {
-                    aes_key: cur.read_16_u8(),
-                    seed: cur.read_32_u8(),
-                    hmac_key: cur.read_64_u8(),
+                    aes_key: cur.read_literal(),
+                    seed: cur.read_literal(),
+                    hmac_key: cur.read_literal(),
                 }),
             }
         })

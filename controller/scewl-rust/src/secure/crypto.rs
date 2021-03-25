@@ -131,7 +131,7 @@ use block_modes::{BlockMode, Cbc};
 use heapless::consts::U256;
 use heapless::LinearMap;
 use hmac::{Hmac, Mac, NewMac};
-use rand::{RngCore, SeedableRng};
+use rand_core::{RngCore, SeedableRng};
 use rand_hc::Hc128Rng;
 use sha2::{Digest, Sha256};
 
@@ -202,9 +202,9 @@ impl VerificationSegment {
         let mut cur = ReadCursor::new(&data);
 
         VerificationSegment {
-            iv: cur.read_16_u8(),
+            iv: cur.read_literal(),
             ctr: cur.read_u64(),
-            hmac: cur.read_32_u8(),
+            hmac: cur.read_literal(),
         }
     }
 
@@ -237,7 +237,7 @@ impl ContentHeader {
     fn from_bytes(data: &[u8]) -> Self {
         let mut cur = ReadCursor::new(data);
         Self {
-            sha: cur.read_32_u8(),
+            sha: cur.read_literal(),
             len: cur.read_usize(),
         }
     }

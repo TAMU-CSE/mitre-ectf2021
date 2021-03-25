@@ -56,24 +56,10 @@ impl<'a> ReadCursor<'a> {
         usize::from_ne_bytes(buf)
     }
 
-    /// Reads 16 bytes from the buffer, then advances by 16 bytes
-    pub fn read_16_u8(&mut self) -> [u8; 16] {
-        let val = self.buf[..16].try_into().unwrap();
-        self.advance(16);
-        val
-    }
-
-    /// Reads 32 bytes from the buffer, then advances by 32 bytes
-    pub fn read_32_u8(&mut self) -> [u8; 32] {
-        let val = self.buf[..32].try_into().unwrap();
-        self.advance(32);
-        val
-    }
-
-    /// Reads 64 bytes from the buffer, then advances by 64 bytes
-    pub fn read_64_u8(&mut self) -> [u8; 64] {
-        let val = self.buf[..64].try_into().unwrap();
-        self.advance(64);
+    /// Reads an N-byte array from the buffer, then advances by N bytes
+    pub fn read_literal<const N: usize>(&mut self) -> [u8; N] {
+        let val = self.buf[..N].try_into().unwrap();
+        self.advance(N);
         val
     }
 
