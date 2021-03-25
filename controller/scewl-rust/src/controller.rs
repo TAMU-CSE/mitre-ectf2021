@@ -375,6 +375,9 @@ impl<'a, A: AuthHandler<C>, C: CryptoHandler> Controller<'a, A, C> {
         if intf.named() != INTF::CPU && hdr.src_id == self.id {
             debug!("Dropping header (self-message): {:?} {:?}", intf, hdr);
             return Err(Error::NoMessage);
+        } else if intf.named() == INTF::CPU && hdr.src_id != self.id {
+            debug!("CPU appears pwn'd; dropping illegal message from CPU: {:?}", hdr);
+            return Err(Error::NoMessage);
         }
 
         debug!("Read header: {:?} {:?}", intf, hdr);
@@ -562,18 +565,18 @@ impl<'a, A: AuthHandler<C>, C: CryptoHandler> Controller<'a, A, C> {
     }
 
     /// Method which is used internally to handle messages received on the radio interface from the
-    /// FAA
+    /// FAA, including broadcasts
     ///
     /// As per the specification, FAA messages will _not_ be encrypted by any mechanism. As such,
     /// this method simply forwards the message received on the radio directly to the CPU.
-    fn handle_faa_recv(&mut self, len: usize) -> Result<()> {
+    fn handle_faa_recv(&mut self, tgt_id: Id, len: usize) -> Result<()> {
         debug!("Handling FAA message received with size {:?}", len);
 
         self.send_msg(
             INTF::CPU,
             &Message {
                 src_id: Id::FAA,
-                tgt_id: self.id,
+                tgt_id,
                 len,
             },
         )
@@ -660,10 +663,10 @@ impl<'a, A: AuthHandler<C>, C: CryptoHandler> Controller<'a, A, C> {
                     // SCEWL_MAX_DATA_SZ is truncated appropriately
                     if let Ok(msg) = self.read_msg(INTF::RAD, SCEWL_MAX_DATA_SZ as u16) {
                         let _ignored = match (msg.src_id, msg.tgt_id) {
-                            (src, Id::Broadcast) => self.handle_brdcst_recv(src, msg.len).is_ok(),
-                            (Id::FAA, tgt) if tgt == self.id => {
-                                self.handle_faa_recv(msg.len).is_ok()
+                            (Id::FAA, tgt) if tgt == self.id || tgt == Id::Broadcast => {
+                                self.handle_faa_recv(tgt, msg.len).is_ok()
                             }
+                            (src, Id::Broadcast) => self.handle_brdcst_recv(src, msg.len).is_ok(),
                             (src, tgt) if tgt == self.id => {
                                 self.handle_scewl_recv(src, msg.len).is_ok()
                             }
