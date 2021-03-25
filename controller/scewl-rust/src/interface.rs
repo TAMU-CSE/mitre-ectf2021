@@ -143,7 +143,6 @@ impl Interface {
 
     /// Reads a byte from the UART data register, optionally blocking
     pub fn readb(&mut self, blocking: bool) -> Result<u8> {
-        // TODO deadlock prevention, even when blocking -- invalid message length will kill
         while blocking && !self.avail() {}
 
         if self.avail() {

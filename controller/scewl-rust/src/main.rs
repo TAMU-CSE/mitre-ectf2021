@@ -95,10 +95,6 @@
 //! is denoted as the [secure implementation](secure). This implementation leverages multiple
 //! security features to ensure that messages cannot be intercepted, modified, or replayed. A full
 //! discussion on those security features can be found in the documentation for that module.
-//!
-//! ## Testing
-//!
-//! TODO Implement both targeted and fuzz testing for each module!
 
 #![no_std]
 #![no_main]

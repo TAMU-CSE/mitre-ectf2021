@@ -280,8 +280,6 @@ where
     /// Th interface to the radio
     rad: Interface,
     /// The data buffer used by Controller to send _all_ messages
-    ///
-    /// TODO consider returning the buffer and copying instead?
     data: &'a mut [u8; SCEWL_MAX_DATA_SZ],
     /// The authentication handler, which will be used to instantiate the crypto handler for the
     /// controller post-authentication
@@ -354,7 +352,6 @@ impl<'a, A: AuthHandler<C>, C: CryptoHandler> Controller<'a, A, C> {
     /// as handled by [`handle_scewl_recv`](Controller::handle_scewl_recv) and [`handle_brdcst_recv`](Controller::handle_brdcst_recv).
     /// See the respective method for details on this post-processing operation.
     pub fn read_msg(&mut self, intf: INTF, len: u16) -> Result<Message> {
-        // TODO: drop messages for situations, e.g. CPU is pwned, drop not src_id == self.id
         let mut intf = self.get_intf(intf);
 
         self.data[..len as usize].as_mut().fill(0);

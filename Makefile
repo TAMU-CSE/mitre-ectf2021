@@ -57,8 +57,7 @@ add_sed:
 		-f dockerfiles/2c_build_controller.Dockerfile \
 		-t ${DEPLOYMENT}/controller:${NAME}_${SCEWL_ID} \
 		--build-arg DEPLOYMENT=${DEPLOYMENT} \
-		--build-arg SCEWL_ID=${SCEWL_ID} \
-		--build-arg SEMIHOSTED=${SEMIHOSTED}
+		--build-arg SCEWL_ID=${SCEWL_ID}
 
 ############################################################
 # Step 3: Remove an SED from the deployment
