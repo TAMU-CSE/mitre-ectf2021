@@ -9,6 +9,26 @@
 # This source file is part of an example system for MITRE's 2021 Embedded System CTF (eCTF).
 # This code is being provided only for educational purposes for the 2021 MITRE eCTF competition,
 # and may not meet MITRE standards for quality. Use this code at your own risk!
+#
+# This is the Secure SCEWL Server that handles SED registration and key distribution for any given
+# deployment. Minimal changes have been made to the provided source files to allow for a these
+# features. It should be noted that any key generation is done within respective dockerfiles and
+# this script primarily focuses on verifying an SED as valid and distributing deployment wide keys.
+#
+# Registration:
+# 1) Given any SED with valid dev_id, establish path to SSS registration secret and scewl_secret
+# 2) Validate the scewl_secret that resides on the registering SED by comparing to the SSS's
+#    registration secret
+# 3) Distribute AES key (16B), HMAC key (64B) and Random seed (32B), given a match
+# 4) Send some error given a discrepancy
+#
+# Succesful execution of this procedure means a given SED is valid and may communicate with other
+# deployed SEDs while through use of the aformentioned keys. If an SED doesn't receive these keys
+# its messages will be thrown out by any receiving SED which is part of the deployment.
+#
+# Deregistration is handled by sending deregistration message and removing registration secret from
+# the SED (see dockerfiles/3_remove_sed.Dockerfile)
+
 
 import socket
 import select
@@ -61,27 +81,40 @@ class SSS:
             if not recvd:
                 raise ConnectionResetError
         logging.debug(f'Received buffer: {repr(data)}')
+
+        # Unpack message received from a given SED
         _, _, _, _, dev_id, op, scewl_secret = struct.unpack('<HHHHHH64s', data)
 
-        # read in corresponding scewl secret
+        '''Message responses are constructed below'''
         
+        # Read in corresponding scewl secret
         secret_path = f'/secrets/{dev_id}_secret'
         if os.path.exists(secret_path):
             with open(secret_path, "rb") as secret_file:
+                # Read in the registration secret for verification
                 checked_secret = secret_file.read(64)
-                # check scewl_secret mismatch
+
+                # Scewl_secret mismatch, registration key provided by SED is invalid. Log this event
+                # and back ALREADY resp_op into the response. Without deployment keys, this SED is
+                # considered invalid for registration.
                 if checked_secret != scewl_secret:
                     logging.info(f'{dev_id}:expected: {checked_secret}, found: {scewl_secret}')
                     resp_op = ALREADY
                     logging.info(f'{dev_id}:key mismatch')
                     body = struct.pack('<Hh', dev_id, resp_op)
-                # requesting repeat transaction
+
+                # Requesting repeat transaction in the case that an SED state already reflects the
+                # received op. Log this event.
                 elif dev_id in self.devs and self.devs[dev_id].status == op:
                     resp_op = ALREADY
                     logging.info(f'{dev_id}:already {"Registered" if op == REG else "Deregistered"}')
                     body = struct.pack('<Hh', dev_id, resp_op)
-                # record registration transaction and read in keys
-                # aes key is 16 bytes, hmac 64, seed 32
+
+                # Record registration transaction and read in keys, then pack into response. This is
+                # a valid SED which can communicate in the deployment.
+                # AES key: 16 bytes
+                # HMAC key: 64 bytes
+                # Random seed: 32bytes
                 elif op == REG:
                     self.devs[dev_id] = Device(dev_id, REG, csock)
                     resp_op = REG
@@ -92,22 +125,29 @@ class SSS:
                     logging.info(f'{dev_id}:Registered')
                     seed = secrets.token_bytes(32)
                     body = struct.pack('<Hh16s32s64s', dev_id, resp_op, aes_key, seed, hmac_key)
-                # record deregistration
+
+                # Record deregistration for an SED which was verified previously to register and
+                # hasn't already been deregistered.
                 else:
                     self.devs[dev_id] = Device(dev_id, DEREG, csock)
                     resp_op = DEREG
                     logging.info(f'{dev_id}:Deregistered')
                     body = struct.pack('<Hh', dev_id, resp_op)
+        # Record some error from reading in the SEDs {dev_id}_secrets folder. This may happen if
+        # an SED is attempted to register, which should not be included on the deployment as specified
+        # by the {dev_id}_secrets folders generated in dockerfiles/2b_create_sed_secrets.Dockerfile
         else:
             resp_op = ALREADY
             logging.info(f'{dev_id}:bad ID')
             body = struct.pack('<Hh', dev_id, resp_op)
 
-        # send response
+        # Send response to SED constructed in the previous section
         resp = struct.pack('<2sHHH', b'SC', dev_id, SSS_ID, len(body)) + body
         logging.debug(f'Sending response {repr(data)}')
         csock.send(resp)
 
+    # The following methods reflect the provided insecure implementation and keep the SSS active
+    # to received registration and deregistration messages before responding
     def start(self):
         unattributed_socks = set()
 
