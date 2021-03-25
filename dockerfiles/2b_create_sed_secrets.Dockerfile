@@ -10,6 +10,8 @@ FROM ${DEPLOYMENT}/sss
 
 ARG SCEWL_ID
 
+RUN dd if=/dev/urandom of=/secrets/${SCEWL_ID}_secret bs=1 count=64
+
 # NOTE: only sss/ and its subdirectories in the repo are accessible to this Dockerfile as .
 # NOTE: to maximize the useage of container cache, use ADD to map in only the files/directories you need
 #       (e.g. only mapping in the SED directory rather than the entire repo)

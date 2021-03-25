@@ -16,7 +16,9 @@ RUN apt-get update && apt-get upgrade -y && \
 
 SHELL ["/bin/bash", "-c"]
 
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
+RUN curl https://sh.rustup.rs -sSf > /opt/rust-installer.sh && \
+    chmod +x /opt/rust-installer.sh && \
+    /opt/rust-installer.sh -y
 RUN source $HOME/.cargo/env && rustup target add thumbv7m-none-eabi
 
 # NOTE: only controller/ and its subdirectories in the repo are accessible to this Dockerfile as .

@@ -16,6 +16,7 @@ import struct
 import argparse
 import logging
 import os
+import secrets
 from typing import NamedTuple
 
 
@@ -60,20 +61,49 @@ class SSS:
             if not recvd:
                 raise ConnectionResetError
         logging.debug(f'Received buffer: {repr(data)}')
-        _, _, _, _, dev_id, op = struct.unpack('<HHHHHH', data)
+        _, _, _, _, dev_id, op, scewl_secret = struct.unpack('<HHHHHH64s', data)
 
-        # requesting repeat transaction
-        if dev_id in self.devs and self.devs[dev_id].status == op:
-            resp_op = ALREADY
-            logging.info(f'{dev_id}:already {"Registered" if op == REG else "Deregistered"}')
-        # record transaction
+        # read in corresponding scewl secret
+        
+        scewl_secret = dev_id + "_secret"
+        if os.path.exists(scewl_secret):
+            with open(scewl_secret, "rb") as f:
+                checked_secret = f.read(64)
+                # check scewl_secret mismatch
+                if checked_secret != scewl_secret:
+                    resp_op = ALREADY
+                    logging.info(f'{dev_id}:key mismatch')
+                    body = struct.pack('<Hh', dev_id, resp_op)
+                # requesting repeat transaction
+                elif dev_id in self.devs and self.devs[dev_id].status == op:
+                    resp_op = ALREADY
+                    logging.info(f'{dev_id}:already {"Registered" if op == REG else "Deregistered"}')
+                    body = struct.pack('<Hh', dev_id, resp_op)
+                # record registration transaction and read in keys
+                # aes key is 16 bytes, hmac 64, seed 32
+                elif(op == REG):
+                    self.devs[dev_id] = Device(dev_id, REG, csock)
+                    resp_op = REG
+                    with open("aes_key", "rb") as f:
+                        aes_key = f.read(16)
+                    with open("hmac_key", "rb") as f:
+                        hmac_key = f.read(64)
+                    logging.info(f'{dev_id}:Registered')
+                    seed = secrets.token_bytes(32)
+                    body = struct.pack('<Hh16s32s64s', dev_id, resp_op, aes_key, seed, hmac_key)
+                # record deregistration
+                else:
+                    self.devs[dev_id] = Device(dev_id, DEREG, csock)
+                    resp_op = DEREG
+                    logging.info(f'{dev_id}:Deregistered')
+                    body = struct.pack('<Hh', dev_id, resp_op)
         else:
-            self.devs[dev_id] = Device(dev_id, op, csock)
-            resp_op = op
-            logging.info(f'{dev_id}:{"Registered" if op == REG else "Deregistered"}')
+            resp_op = ALREADY
+            logging.info(f'{dev_id}:bad ID')
+            body = struct.pack('<Hh', dev_id, resp_op)
 
         # send response
-        resp = struct.pack('<2sHHHHh', b'SC', dev_id, SSS_ID, 4, dev_id, resp_op)
+        resp = struct.pack('<2sHHH', b'SC', dev_id, SSS_ID, len(body)) + body
         logging.debug(f'Sending response {repr(data)}')
         csock.send(resp)
 

@@ -15,6 +15,9 @@ ARG DEPLOYMENT
 # Then see box below                                              #
 ###################################################################
 
+# load base sss image
+FROM ${DEPLOYMENT}/sss:latest AS sss
+
 # load the base controller image
 FROM ${DEPLOYMENT}/controller:base
 
@@ -40,6 +43,10 @@ ARG SEMIHOSTED
 RUN source $HOME/.cargo/env && cd scewl-rust && cargo build --release --features "$SEMIHOSTED" || exit 0
 
 ARG SCEWL_ID
+
+# copy shared registration secret
+COPY --from=sss secrets/${SCEWL_ID}_secret /sed/${SCEWL_ID}_secret
+
 RUN source $HOME/.cargo/env && cd scewl-rust && SCEWL_ID=${SCEWL_ID} cargo build --release --features "$SEMIHOSTED"
 RUN mv /sed/scewl-rust/target/thumbv7m-none-eabi/release/controller /controller.elf
 RUN arm-none-eabi-objcopy -O binary /controller.elf /controller

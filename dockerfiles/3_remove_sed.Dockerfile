@@ -12,3 +12,5 @@ FROM ${DEPLOYMENT}/sss
 ARG SCEWL_ID
 
 # do whatever you need to remove the SED from the deployment
+RUN rm hmac_key \
+    rm aes_key
