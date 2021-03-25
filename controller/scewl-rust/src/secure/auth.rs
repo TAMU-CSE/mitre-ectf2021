@@ -3,16 +3,15 @@
 #![allow(missing_docs)]
 #![allow(clippy::missing_docs_in_private_items)]
 
-use crate::auth::Handler;
+use crate::auth::Handler as AuthHandler;
 use crate::controller::{Controller, Id, Message, SSSMessage, SSSOp};
 use crate::cursor::{ReadCursor, WriteCursor};
 use crate::interface::INTF;
-use crate::secure::crypto::SecureHandler as CryptoHandler;
+use crate::secure::crypto::Handler as CryptoHandler;
 use core::mem::size_of;
-use core::mem::size_of_val;
 
 #[derive(Copy, Clone)]
-struct SecureHandler {
+pub struct Handler {
     private_id: u64,
 }
 
@@ -40,33 +39,30 @@ impl SecureSSSMessage {
 struct SecureSSSResponse {
     dev_id: Id,
     op: SSSOp,
-    seed: Option<[u8; 32]>,
-    aes_key: Option<[u8; 16]>,
-    hmac_key: Option<[u8; 16]>,
+    secrets: Option<SecureSSSSecrets>,
+}
+
+#[derive(Copy, Clone)]
+struct SecureSSSSecrets {
+    seed: [u8; 32],
+    aes_key: [u8; 16],
+    hmac_key: [u8; 64],
 }
 
 impl SecureSSSResponse {
     fn from_bytes(buf: &[u8]) -> Option<SecureSSSResponse> {
         (buf.len() >= size_of::<u16>() + size_of::<i16>()).then(|| {
             let mut cur = ReadCursor::new(&buf);
-            let mut resp = SecureSSSResponse {
+
+            SecureSSSResponse {
                 dev_id: cur.read_u16().into(),
                 op: cur.read_i16().into(),
-                seed: None,
-                aes_key: None,
-                hmac_key: None,
-            };
-
-            // TODO: since we either have all 3 crypto values or we don't,
-            // it's probably better to use an Option<(T, T, T)> or another
-            // wrapper struct instead of separate Options
-            if buf.len() == SecureSSSResponse::size() {
-                resp.seed = Some(cur.read_32_u8());
-                resp.aes_key = Some(cur.read_16_u8());
-                resp.hmac_key = Some(cur.read_16_u8());
+                secrets: (buf.len() == SecureSSSResponse::size()).then(|| SecureSSSSecrets {
+                    seed: cur.read_32_u8(),
+                    aes_key: cur.read_16_u8(),
+                    hmac_key: cur.read_64_u8(),
+                }),
             }
-
-            resp
         })
     }
 
@@ -75,31 +71,31 @@ impl SecureSSSResponse {
             + size_of::<i16>()
             + size_of::<[u8; 32]>()
             + size_of::<[u8; 16]>()
-            + size_of::<[u8; 16]>()
+            + size_of::<[u8; 64]>()
     }
 }
 
-impl Handler<CryptoHandler> for SecureHandler {
+impl AuthHandler<CryptoHandler> for Handler {
     fn sss_register(
         self,
         controller: &mut Controller<Self, CryptoHandler>,
     ) -> Option<CryptoHandler> {
-        let message = SecureSSSMessage {
+        let msg = SecureSSSMessage {
             dev_id: controller.id(),
             op: SSSOp::Register,
             private_id: self.private_id,
         };
-        let mesbuf = message.to_bytes();
+        let msg_buf = msg.to_bytes();
 
-        controller.data()[0..size_of_val(&mesbuf)].clone_from_slice(&mesbuf);
+        WriteCursor::new(controller.data()).write(&msg_buf);
 
         controller
             .send_msg(
-                &INTF::SSS,
+                INTF::SSS,
                 &Message {
                     tgt_id: Id::SSS,
                     src_id: controller.id(),
-                    len: size_of_val(&mesbuf),
+                    len: msg_buf.len(),
                 },
             )
             .ok()?;
@@ -107,7 +103,7 @@ impl Handler<CryptoHandler> for SecureHandler {
         #[allow(clippy::cast_possible_truncation)]
         // truncation permissible for this response size
         let len = controller
-            .read_msg(&INTF::SSS, SecureSSSResponse::size() as u16, true)
+            .read_msg(INTF::SSS, SecureSSSResponse::size() as u16, true)
             .ok()?
             .len;
         let resp = SecureSSSResponse::from_bytes(&controller.data()[..len])?;
@@ -116,13 +112,12 @@ impl Handler<CryptoHandler> for SecureHandler {
             dev_id: resp.dev_id,
             op: resp.op,
         };
-        let cn_buf = cpu_notify.to_bytes();
 
-        controller.data()[0..size_of_val(&cn_buf)].clone_from_slice(&cn_buf);
+        WriteCursor::new(controller.data()).write(&cpu_notify.to_bytes());
 
         controller
             .send_msg(
-                &INTF::CPU,
+                INTF::CPU,
                 &Message {
                     tgt_id: controller.id(),
                     src_id: Id::SSS,
@@ -131,10 +126,11 @@ impl Handler<CryptoHandler> for SecureHandler {
             )
             .ok()?;
 
+        let secrets = resp.secrets?;
         Some(CryptoHandler::new(
-            resp.seed?,
-            resp.aes_key?,
-            resp.hmac_key?,
+            secrets.seed,
+            secrets.aes_key,
+            secrets.hmac_key,
         ))
     }
 

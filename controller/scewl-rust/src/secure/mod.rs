@@ -3,5 +3,10 @@
 //!
 //! See the associated modules for further details.
 
+pub use auth::Handler as AuthHandler;
+pub use test_auth::Handler as TestAuthHandler;
+pub use crypto::Handler as CryptoHandler;
+
 mod auth;
 mod crypto;
+mod test_auth;

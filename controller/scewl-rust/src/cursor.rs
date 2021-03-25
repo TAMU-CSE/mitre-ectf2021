@@ -3,8 +3,8 @@
 //!
 //! These types are meant for internal use for consistent copying and serialisation between the
 //! data buffer of the controller and various types which can be (de)serialised from/to byte arrays.
+//! Note that the cursor methods will **panic** if the respective buffers aren't the correct size.
 
-use byteorder::{ByteOrder, NativeEndian};
 use core::cmp::min;
 use core::convert::TryInto;
 use core::mem::size_of;
@@ -28,23 +28,32 @@ impl<'a> ReadCursor<'a> {
         self.buf = &self.buf[n..];
     }
 
-    /// Limits the cursor's scanning to a specific range; useful for [`copy_to`](ReadCursor::copy_to)
-    pub fn limit(&mut self, n: usize) {
-        self.buf = &self.buf[..n];
-    }
-
     /// Reads a u16 from the buffer, then advances by the size of one u16
     pub fn read_u16(&mut self) -> u16 {
-        let val = NativeEndian::read_u16(self.buf);
+        let buf = self.buf[..size_of::<u16>()].try_into().unwrap();
         self.advance(size_of::<u16>());
-        val
+        u16::from_ne_bytes(buf)
     }
 
     /// Reads an i16 from the buffer, then advances by the size of one i16
     pub fn read_i16(&mut self) -> i16 {
-        let val = NativeEndian::read_i16(self.buf);
+        let buf = self.buf[..size_of::<i16>()].try_into().unwrap();
         self.advance(size_of::<i16>());
-        val
+        i16::from_ne_bytes(buf)
+    }
+
+    /// Reads a u64 from the buffer, then advances by the size of one u64
+    pub fn read_u64(&mut self) -> u64 {
+        let buf = self.buf[..size_of::<u64>()].try_into().unwrap();
+        self.advance(size_of::<u64>());
+        u64::from_ne_bytes(buf)
+    }
+
+    /// Reads a usize from the buffer, then advances by the size of one usize
+    pub fn read_usize(&mut self) -> usize {
+        let buf = self.buf[..size_of::<usize>()].try_into().unwrap();
+        self.advance(size_of::<usize>());
+        usize::from_ne_bytes(buf)
     }
 
     /// Reads 16 bytes from the buffer, then advances by 16 bytes
@@ -61,11 +70,18 @@ impl<'a> ReadCursor<'a> {
         val
     }
 
+    /// Reads 64 bytes from the buffer, then advances by 64 bytes
+    pub fn read_64_u8(&mut self) -> [u8; 64] {
+        let val = self.buf[..64].try_into().unwrap();
+        self.advance(64);
+        val
+    }
+
     /// Copies the content of the read cursor into the write cursor, up to either the end of this
     /// cursor or the one being written to, whichever comes first
-    pub fn copy_to(&mut self, wc: WriteCursor) -> usize {
-        let len = min(wc.buf.len(), self.buf.len());
-        wc.buf[..len].copy_from_slice(&self.buf[..len]);
+    pub fn copy_to(&mut self, dst: &mut [u8]) -> usize {
+        let len = min(dst.len(), self.buf.len());
+        dst[..len].copy_from_slice(&self.buf[..len]);
         self.advance(len);
         len
     }
@@ -78,6 +94,7 @@ impl<'a> ReadCursor<'a> {
 /// write cursor, returning the updated cursor to allow for chaining of writes
 #[derive(Debug)]
 pub struct WriteCursor<'a> {
+    /// Buffer which is written to by this cursor
     buf: &'a mut [u8],
 }
 
@@ -94,55 +111,34 @@ impl<'a> WriteCursor<'a> {
         }
     }
 
-    /// Limits the cursor's writing to a specific range; useful for [`write`](WriteCursor::write)
-    pub fn limit(self, n: usize) -> Self {
-        Self {
-            buf: &mut self.buf[..n],
-        }
-    }
-
-    /// Writes a byte to the buffer, then advances by a byte
-    pub fn write_u8(self, n: u8) -> Self {
-        self.buf[0] = n;
-        self.advance(1)
-    }
-
     /// Writes a u16 to the buffer, then advances by the size of one u16
     pub fn write_u16(self, n: u16) -> Self {
-        NativeEndian::write_u16(self.buf, n);
+        self.buf[..size_of::<u16>()].copy_from_slice(&n.to_ne_bytes());
         self.advance(size_of::<u16>())
     }
 
     /// Writes an i16 to the buffer, then advances by the size of one i16
     pub fn write_i16(self, n: i16) -> Self {
-        NativeEndian::write_i16(self.buf, n);
+        self.buf[..size_of::<i16>()].copy_from_slice(&n.to_ne_bytes());
         self.advance(size_of::<i16>())
     }
 
     /// Writes a usize to the buffer, then advances by the size of one usize
     pub fn write_usize(self, n: usize) -> Self {
-        self.buf.copy_from_slice(&n.to_ne_bytes());
-        self.advance(size_of::<u64>())
+        self.buf[..size_of::<usize>()].copy_from_slice(&n.to_ne_bytes());
+        self.advance(size_of::<usize>())
     }
 
     /// Writes a u64 to the buffer, then advances by the size of one u64
     pub fn write_u64(self, n: u64) -> Self {
-        NativeEndian::write_u64(self.buf, n);
+        self.buf[..size_of::<u64>()].copy_from_slice(&n.to_ne_bytes());
         self.advance(size_of::<u64>())
     }
 
-    /// Writes the entire contents of the read cursor provided to this buffer, if possible
-    ///
-    /// If the read cursors remaining data is larger than the remaining data in this write cursor,
-    /// this method returns itself in an `Err` without modifying the underlying buffer or advancing.
-    /// Otherwise, this method returns an advanced cursor and writes the content of the provided
-    /// read cursor to the underlying buffer.
-    pub fn write(self, rc: ReadCursor) -> Result<Self, Self> {
-        if self.buf.len() < rc.buf.len() {
-            Err(self)
-        } else {
-            self.buf[..rc.buf.len()].copy_from_slice(rc.buf);
-            Ok(self.advance(rc.buf.len()))
-        }
+    /// Writes the entire source buffer to the underlying buffer,
+    /// then advances by the length of the source buffer
+    pub fn write(self, src: &[u8]) -> Self {
+        self.buf[..src.len()].copy_from_slice(src);
+        self.advance(src.len())
     }
 }

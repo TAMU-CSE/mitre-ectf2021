@@ -20,7 +20,6 @@ use core::fmt::Formatter;
 use core::fmt::{Debug, Result as FmtResult};
 use core::result::Result as CoreResult;
 use cortex_m::asm;
-use cty::uintptr_t;
 use volatile_register::{RO, RW, WO};
 
 /// The UART struct as specified by the CMSIS specification (and, more specifically, [line 620 of `lm3s_cmsis.h`](https://github.com/mitre-cyber-academy/2021-ectf-insecure-example/blob/master/controller/lm3s/lm3s_cmsis.h#L620))
@@ -78,7 +77,7 @@ pub enum RWStatusMask {
 
 /// Memory-mapped UART peripheral addresses for the different serial lines, which will then be
 /// copied to the sockets for the respective data lines being emulated
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Copy, Clone)]
 pub enum INTF {
     /// Address of the UART which connects to the CPU
     CPU = 0x4000_C000,
@@ -90,6 +89,7 @@ pub enum INTF {
 
 /// Generic error type for interface operations
 #[allow(dead_code)]
+#[derive(Debug)]
 pub enum Error {
     /// An unknown error occurred during the interface operation
     Unknown,
@@ -121,7 +121,7 @@ impl Interface {
         // memory-mapped UART peripherals, and the struct has been confirmed as the correct per the
         // TI specification linked above
         unsafe {
-            let uart = &mut *(intf as uintptr_t as *mut UART);
+            let uart = &mut *(intf as usize as *mut UART);
             uart.ctl.write(uart.ctl.read() & 0xffff_fffe);
             uart.ibrd.write((uart.ibrd.read() & 0xffff_0000) | 0x000a);
             uart.fbrd.write((uart.fbrd.read() & 0xffff_0000) | 0x0036);
@@ -139,6 +139,7 @@ impl Interface {
 
     /// Reads a byte from the UART data register, optionally blocking
     pub fn readb(&mut self, blocking: bool) -> Result<u8> {
+        // TODO deadlock prevention, even when blocking -- invalid message length will kill
         while blocking && !self.avail() {}
 
         if self.avail() {
@@ -150,15 +151,15 @@ impl Interface {
         }
     }
 
-    /// Reads a buffer from the UART data register, optionally blocking
+    /// Reads a buffer from the UART data register, optionally blocking; returns the number of bytes successfully read
     ///
     /// Note that, unlike the original implementation, this does not unnecessarily perform a nop
     /// loop while blocking.
-    pub fn read(&mut self, buf: &mut [u8], n: usize, blocking: bool) -> Result<usize> {
-        for (i, b) in buf.iter_mut().enumerate().take(n) {
+    pub fn read(&mut self, buf: &mut [u8], blocking: bool) -> usize {
+        for (i, b) in buf.iter_mut().enumerate() {
             match self.readb(blocking) {
                 Ok(res) => *b = res,
-                Err(_) => return Result::Ok(i),
+                Err(_) => return i,
             }
 
             if !blocking {
@@ -167,7 +168,33 @@ impl Interface {
                 }
             }
         }
-        Ok(n)
+
+        buf.len()
+    }
+
+    /// Discards the given number of bytes, without blocking
+    pub fn discard(&mut self, n: usize) {
+        for _ in 0..n {
+            for _ in 0..10_000 {
+                // some delay for buffering
+                asm::nop()
+            }
+
+            if self.readb(false).is_err() {
+                break; // fail fast
+            }
+        }
+    }
+
+    /// Discards bytes that match the supplied predicate, optionally blocking; on success, returns the first byte that doesn't match the predicate
+    pub fn discard_while(&mut self, predicate: impl Fn(u8) -> bool, blocking: bool) -> Result<u8> {
+        loop {
+            let b = self.readb(blocking)?;
+
+            if !predicate(b) {
+                return Ok(b);
+            }
+        }
     }
 
     /// Write a byte to the UART data register -- always blocking
@@ -180,21 +207,22 @@ impl Interface {
     }
 
     /// Write a buffer to the UART data register -- always blocking
-    pub fn write(&mut self, buf: &[u8], len: usize) -> usize {
-        for b in buf.iter().take(len) {
+    pub fn write(&mut self, buf: &[u8]) -> usize {
+        for b in buf {
             self.writeb(*b);
         }
-        len
+
+        buf.len()
     }
 
     /// Converts this interface into its named form instead of a wrapper, allowing references to
     /// specific UARTs without also referencing how to read and write to them
     pub fn named(&self) -> INTF {
-        match self.uart as *const UART as uintptr_t {
+        match self.uart as *const UART as usize {
             0x4000_C000 => INTF::CPU,
             0x4000_D000 => INTF::SSS,
             0x4000_E000 => INTF::RAD,
-            _ => panic!("Impossible branch; only these addresses can be used"),
+            _ => unreachable!("Impossible branch; only these addresses can be used"),
         }
     }
 }

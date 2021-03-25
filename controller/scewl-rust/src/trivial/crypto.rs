@@ -2,19 +2,25 @@
 //! controller -- which does absolutely nothing!
 
 use crate::controller::{Message, SCEWL_MAX_DATA_SZ};
-use crate::crypto::Handler;
-use core::option::Option;
-use core::option::Option::Some;
+use crate::crypto::Handler as CryptoHandler;
 
 /// A trivial crypto handler, which does nothing!
-pub struct NopCryptoHandler;
+pub struct Handler;
 
-impl Handler for NopCryptoHandler {
-    fn encrypt(&mut self, _: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> usize {
-        message.len
+impl CryptoHandler for Handler {
+    fn verify(&mut self, _: &[u8; SCEWL_MAX_DATA_SZ], _: Message) -> bool {
+        true
     }
 
-    fn decrypt(&mut self, _: &mut [u8; SCEWL_MAX_DATA_SZ], message: Message) -> Option<usize> {
-        Some(message.len)
+    fn verification_len(&self) -> usize {
+        0
+    }
+
+    fn encrypt(&mut self, _: &mut [u8; SCEWL_MAX_DATA_SZ], msg: Message) -> usize {
+        msg.len
+    }
+
+    fn decrypt(&mut self, _: &mut [u8; SCEWL_MAX_DATA_SZ], msg: Message) -> Option<usize> {
+        Some(msg.len)
     }
 }

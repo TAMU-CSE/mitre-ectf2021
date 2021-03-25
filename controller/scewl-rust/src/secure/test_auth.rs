@@ -1,14 +1,13 @@
-//! The authentication module for the trivial implementation of the security features for the
-//! controller, which emulates the original behaviour of `sss_register` and `sss_deregister` from
-//! the [original C implementation](https://github.com/mitre-cyber-academy/2021-ectf-insecure-example/blob/master/controller/controller.c)
+// for use in testing crypto w/o an SSS implementation; uses the default SSS implementation
+
+#![doc(hidden)]
 
 use crate::auth::Handler as AuthHandler;
 use crate::controller::{Controller, Id, Message, SSSMessage, SSSOp};
 use crate::cursor::ReadCursor;
 use crate::interface::INTF::{CPU, SSS};
-use crate::trivial::CryptoHandler;
+use crate::secure::CryptoHandler;
 
-/// A trivial authentication handler which simply passes the CPU-formatted SSS message to the SSS
 #[derive(Copy, Clone)]
 pub struct Handler;
 
@@ -38,7 +37,8 @@ impl AuthHandler<CryptoHandler> for Handler {
 
         controller.send_msg(CPU, &res).ok()?;
 
-        (SSSMessage::from_bytes(controller.data()).op == SSSOp::Register).then(|| CryptoHandler)
+        (SSSMessage::from_bytes(controller.data()).op == SSSOp::Register)
+            .then(|| CryptoHandler::new([0_u8; 32], [0_u8; 16], [0_u8; 64]))
     }
 
     fn sss_deregister(self, controller: &mut Controller<Self, CryptoHandler>) -> bool {
@@ -74,3 +74,4 @@ impl AuthHandler<CryptoHandler> for Handler {
         SSSMessage::from_bytes(controller.data()).op == SSSOp::Deregister
     }
 }
+
